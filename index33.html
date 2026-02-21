@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>GGUI v7.0 - Reactive Engine & Live Tuning</title>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --bg: #f8fafc;
+            --text: #0f172a;
+            --border: #cbd5e1;
+        }
+
+        body { 
+            font-family: -apple-system, system-ui, sans-serif; 
+            background: var(--bg); color: var(--text); margin: 0; padding-bottom: 60vh;
+        }
+
+        /* MONITOR EXPANDIDO */
+        #log-monitor { 
+            position: fixed; bottom: 20px; right: 20px; width: 340px; 
+            background: #fff; padding: 20px; border: 1px solid var(--border); 
+            border-radius: 12px; z-index: 1000; font-family: monospace; font-size: 11px; 
+            box-shadow: 0 15px 35px rgba(0,0,0,0.1);
+        }
+
+        .config-row { display: flex; justify-content: space-between; margin-bottom: 5px; align-items: center; }
+        .config-row input { width: 50px; font-size: 10px; }
+
+        /* UI CLEAN */
+        .instancia-container {
+            min-height: 85vh; display: flex; align-items: center; justify-content: center;
+            padding: 40px; border-bottom: 1px solid var(--border); opacity: 0.3; transition: 0.4s;
+        }
+        .commited .instancia-container { opacity: 1; }
+
+        .clean-card {
+            background: #fff; border: 1px solid var(--border); border-radius: 20px;
+            padding: 50px; text-align: center; width: 100%; max-width: 500px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.02); transition: 0.3s;
+        }
+        .clean-card:hover { border-color: var(--primary); transform: translateY(-2px); }
+
+        .item-card {
+            background: #fff; border: 2px solid var(--border); border-radius: 16px;
+            padding: 40px; width: 280px; text-align: center;
+        }
+
+        .btn-intent { 
+            background: var(--primary); color: #fff; border: none; 
+            padding: 12px 20px; border-radius: 8px; cursor: pointer; font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+
+<div id="log-monitor">
+    <strong style="color:var(--primary)">GGUI CONTROL PANEL v7.0</strong><hr>
+    
+    <div class="config-row"><span>Decay (ms):</span> <input type="number" id="cfg-decay" value="10000"></div>
+    <div class="config-row"><span>Linear Speed:</span> <input type="number" id="cfg-speed" step="0.1" value="0.1"></div>
+    <div class="config-row"><span>Focus Share %:</span> <input type="number" id="cfg-share" value="85"></div>
+    <hr>
+    
+    <strong>STATUS:</strong> <span id="current-focus">REPOUSO</span><br>
+    <strong>PRÓXIMO:</strong> <span id="next-label">--</span><br>
+    <strong>DECAY EM:</strong> <span id="decay-timer">--</span>s
+    <div id="prob-list" style="margin-top:15px;"></div>
+</div>
+
+<div id="wrapper">
+    <section id="sobre-mim" class="instancia-container" style="opacity: 1;">
+        <div style="text-align: center;">
+            <h1 style="font-size: 4rem; margin: 0;">Wayne.</h1>
+            <p style="font-size: 1.5rem; color: #64748b;">Sistemas Complexos Adaptativos.</p>
+        </div>
+    </section>
+
+    <div id="timeline"></div>
+    <div id="candidate-area"></div>
+</div>
+
+<script>
+// OBJETO DE CONFIGURAÇÃO VIVO (LIGADO AO DOM)
+const LIVE_CONFIG = {
+    get decay() { return parseInt(document.getElementById('cfg-decay').value) },
+    get speed() { return parseFloat(document.getElementById('cfg-speed').value) },
+    get share() { return parseInt(document.getElementById('cfg-share').value) }
+};
+
+const templates = {
+    ctas: {
+        "CONTATOS": `<div class="instancia-container"><div class="clean-card"><h2>Canais de Contato</h2><p>LinkedIn • GitHub • Spotify</p></div></div>`,
+        "GO_DESENHOS": `<div class="instancia-container"><div class="clean-card" onclick="injectIntent('desenhos')"><h2>Sketchbook</h2><p>Explorar artes visuais</p><button class="btn-intent">Mudar Foco</button></div></div>`,
+        "GO_PROJETOS": `<div class="instancia-container"><div class="clean-card" onclick="injectIntent('projetos')"><h2>Portfolio</h2><p>Explorar cases técnicos</p><button class="btn-intent">Mudar Foco</button></div></div>`
+    },
+    desenhos: {},
+    projetos: {}
+};
+
+// Gerar placeholders 3.N e 4.N
+for(let i=1; i<=5; i++){
+    templates.desenhos[`D3.${i}`] = `<div class="instancia-container"><div class="item-card"><span>ART_ID: 3.${i}</span><h3>Estudo Visual</h3></div></div>`;
+    templates.projetos[`P4.${i}`] = `<div class="instancia-container"><div class="item-card"><span>PROJ_ID: 4.${i}</span><h3>Case de Sistema</h3></div></div>`;
+}
+
+let state = {
+    targetWeights: {},
+    currentWeights: {},
+    focusGroup: 'ctas',
+    lastDecayTime: Date.now(),
+    last: null,
+    isLocked: false,
+    currentCandidate: null
+};
+
+// Inicialização
+function init() {
+    Object.keys(templates).forEach(group => {
+        Object.keys(templates[group]).forEach(item => {
+            state.currentWeights[item] = 0;
+            state.targetWeights[item] = 0;
+        });
+    });
+    calculateTargets('ctas');
+    runEngine();
+}
+
+function calculateTargets(focus) {
+    state.focusGroup = focus;
+    state.lastDecayTime = Date.now();
+    
+    const groups = Object.keys(templates);
+    groups.forEach(group => {
+        const isFocused = (group === focus);
+        const groupShare = isFocused ? LIVE_CONFIG.share : (100 - LIVE_CONFIG.share) / (groups.length - 1);
+        const items = Object.keys(templates[group]);
+        items.forEach(item => { state.targetWeights[item] = groupShare / items.length; });
+    });
+}
+
+// LOOP DE INTERPOLAÇÃO (Tira o "pulo" e faz o fade de probabilidade)
+setInterval(() => {
+    Object.keys(state.currentWeights).forEach(key => {
+        const diff = state.targetWeights[key] - state.currentWeights[key];
+        if (Math.abs(diff) > 0.01) {
+            state.currentWeights[key] += Math.sign(diff) * Math.min(Math.abs(diff), LIVE_CONFIG.speed);
+        }
+    });
+    updateMonitor();
+}, 50);
+
+function runEngine() {
+    if (state.isLocked) return;
+    
+    // 1. Criamos o pool inicial ignorando o último item (para não repetir)
+    let pool = Object.keys(state.currentWeights).filter(k => k !== state.last);
+
+    // 2. FILTRO DE EXCLUSÃO MÚTUA:
+    // Se o foco é desenhos, tiramos o botão que chama desenhos.
+    if (state.focusGroup === 'desenhos') {
+        pool = pool.filter(k => k !== 'GO_DESENHOS');
+    }
+    // Se o foco é projetos, tiramos o botão que chama projetos.
+    if (state.focusGroup === 'projetos') {
+        pool = pool.filter(k => k !== 'GO_PROJETOS');
+    }
+
+    const total = pool.reduce((acc, k) => acc + state.currentWeights[k], 0);
+    if(total <= 0) return; 
+
+    let rand = Math.random() * total;
+    let selected = pool[0];
+    for (const key of pool) {
+        if (rand < state.currentWeights[key]) { selected = key; break; }
+        rand -= state.currentWeights[key];
+    }
+    
+    state.currentCandidate = selected;
+    document.getElementById('next-label').innerText = selected;
+
+    for (const group in templates) {
+        if (templates[group][selected]) {
+            document.getElementById('candidate-area').innerHTML = templates[group][selected];
+            break;
+        }
+    }
+}
+
+function injectIntent(group) {
+    // 1. Define os novos alvos (targets) para o sistema saber onde estabilizar
+    calculateTargets(group);
+    
+    // 2. O PULO INSTANTÂNEO:
+    // Forçamos os itens do grupo clicado a assumirem a probabilidade alta AGORA
+    const itemsDoGrupo = Object.keys(templates[group]);
+    const shareIndividual = LIVE_CONFIG.share / itemsDoGrupo.length;
+    
+    itemsDoGrupo.forEach(item => {
+        state.currentWeights[item] = shareIndividual;
+    });
+
+    // 3. Opcional: Derrubar os outros grupos para 0 instantaneamente também 
+    // para garantir que o próximo sorteio seja puramente do grupo novo
+    Object.keys(state.currentWeights).forEach(key => {
+        if (!itemsDoGrupo.includes(key)) {
+            state.currentWeights[key] = 0;
+        }
+    });
+
+    // 4. Rerola o motor na hora com os novos pesos "bombados"
+    runEngine(); 
+    
+    window.scrollBy({ top: 150, behavior: 'smooth' });
+}
+
+function commit() {
+    state.isLocked = true;
+    const item = state.currentCandidate;
+    state.last = item;
+    
+    // Zera a chance atual (Linear Recovery começa aqui)
+    state.currentWeights[item] = 0;
+    
+    const div = document.createElement('div');
+    div.className = 'commited';
+    div.innerHTML = document.getElementById('candidate-area').innerHTML;
+    document.getElementById('timeline').appendChild(div);
+    
+    document.getElementById('candidate-area').innerHTML = '';
+    
+    setTimeout(() => { 
+        state.isLocked = false; 
+        runEngine(); 
+    }, 500);
+}
+
+// Decay Timer
+setInterval(() => {
+    if (state.focusGroup !== 'ctas') {
+        const elapsed = Date.now() - state.lastDecayTime;
+        const remaining = Math.max(0, (LIVE_CONFIG.decay - elapsed) / 1000);
+        document.getElementById('decay-timer').innerText = remaining.toFixed(1);
+        if (remaining <= 0) calculateTargets('ctas');
+    } else {
+        document.getElementById('decay-timer').innerText = "--";
+    }
+}, 100);
+
+window.addEventListener('scroll', () => {
+    const area = document.getElementById('candidate-area');
+    if (area.children.length === 0 || state.isLocked) return;
+    if (area.getBoundingClientRect().top < window.innerHeight - 150) {
+        commit();
+    }
+});
+
+function updateMonitor() {
+    document.getElementById('current-focus').innerText = state.focusGroup.toUpperCase();
+    const list = document.getElementById('prob-list');
+    list.innerHTML = Object.entries(state.currentWeights)
+        .sort((a,b) => b[1] - a[1]).slice(0, 5)
+        .map(([k, v]) => `
+            <div style="margin-bottom:8px">
+                <div style="display:flex; justify-content:space-between"><span>${k}</span> <span>${v.toFixed(1)}%</span></div>
+                <div style="width:100%; height:3px; background:#eee;"><div style="width:${v*2}%; height:100%; background:var(--primary)"></div></div>
+            </div>
+        `).join('');
+}
+
+init();
+// Motor tenta atualizar o candidato periodicamente (caso o usuário não scrolle)
+setInterval(runEngine, 400);
+</script>
+</body>
+</html>

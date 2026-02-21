@@ -1,0 +1,8 @@
+const DEFAULT_COLORS = {
+    'ctas': '#45f287',
+    'CONTATOS': '#8aa1ff',
+    'GO_DESENHOS': '#13e75d',
+    'GO_PROJETOS': '#374fae',
+    'desenhos': '#257e43',
+    'projetos': '#293460',
+};
