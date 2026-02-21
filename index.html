@@ -141,11 +141,18 @@
 
         /* ARTE */
         .art-card {
-            width: min(80vw, 520px);
-            border-radius: 4px; overflow: hidden; position: relative;
+            width: min(80vw, 80vh);   /* quadrado máximo */
+            height: min(80vw, 80vh);
+            border-radius: 4px;
+            overflow: hidden;
+            position: relative;
         }
+
         .art-card img {
-            width: 100%; height: auto; display: block;
+            width: 100%;
+            height: 100%;
+            object-fit: contain;   /* ← preenche sem cortar */
+            display: block;
             border-radius: 4px;
         }
         /* fallback enquanto carrega */
