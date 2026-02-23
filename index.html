@@ -3,6 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>...wayne...</title>
     <style>
         :root {
@@ -17,17 +19,27 @@
             margin: 0; padding-bottom: 60vh;
         }
         #bg-canvas {
-            position: fixed; top: 0; left: 0;
-            width: 100vw; height: 150vh;
-            /* adiciona: */
+            position: fixed;
+            /* expande pra fora das safe areas em todos os lados */
+            top: calc(-1 * env(safe-area-inset-top, 0px));
+            left: calc(-1 * env(safe-area-inset-left, 0px));
+            right: calc(-1 * env(safe-area-inset-right, 0px));
+            bottom: calc(-1 * env(safe-area-inset-bottom, 0px));
+            width: calc(100% + env(safe-area-inset-left, 0px) + env(safe-area-inset-right, 0px));
+            height: calc(100% + env(safe-area-inset-top, 0px) + env(safe-area-inset-bottom, 0px));
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        html, body {
+            height: 100%;
             min-height: -webkit-fill-available;
-            z-index: 0; pointer-events: none;
         }
         #wrapper, #log-monitor, #color-modal-overlay { position: relative; z-index: 1; }
 
         /* MONITOR */
         #log-monitor {
-            position: fixed; bottom: 20px; right: 20px; width: 280px;
+            position: fixed; bottom: 20px; right: 20px; width: 300px;
             background: rgba(5,5,5,0.88); backdrop-filter: blur(12px);
             padding: 16px; border: 1px solid var(--border);
             border-radius: 12px; z-index: 1000; font-family: monospace; font-size: 11px;
@@ -35,7 +47,7 @@
         }
         .config-row { display: flex; justify-content: space-between; margin-bottom: 5px; align-items: center; }
         .config-row input {
-            width: 55px; font-size: 10px;
+            width: 60px; font-size: 10px;
             background: rgba(255,255,255,0.06); border: 1px solid var(--border);
             color: var(--text); border-radius: 4px; padding: 2px 4px;
         }
@@ -143,7 +155,7 @@
 
         /* ARTE */
         .art-card {
-            width: min(80vw, 80vh);   /* quadrado máximo */
+            width: min(80vw, 80vh);
             height: min(80vw, 80vh);
             border-radius: 4px;
             overflow: hidden;
@@ -153,11 +165,10 @@
         .art-card img {
             width: 100%;
             height: 100%;
-            object-fit: contain;   /* ← preenche sem cortar */
+            object-fit: contain;
             display: block;
             border-radius: 4px;
         }
-        /* fallback enquanto carrega */
         .art-card .art-loading {
             width: 100%; aspect-ratio: 1 / 1;
             background: rgba(255,255,255,0.04);
@@ -212,6 +223,20 @@
         /* HERO */
         #sobre-mim .cta-display h2 { font-weight: 900; }
         .bar-fill { height: 100%; background: rgba(255,255,255,0.5); transition: width 0.3s; }
+
+        /* cooldown badge no monitor */
+        #cooldown-list { margin-top: 10px; }
+        .cooldown-item {
+            font-size: 9px; opacity: 0.35; letter-spacing: 0.08em;
+            display: flex; justify-content: space-between; margin-bottom: 3px;
+        }
+        .cooldown-item .cd-bar {
+            width: 60px; height: 3px; background: rgba(255,255,255,0.08);
+            border-radius: 2px; margin-top: 2px; overflow: hidden;
+        }
+        .cooldown-item .cd-fill {
+            height: 100%; background: rgba(255,100,80,0.5); transition: width 0.3s;
+        }
     </style>
 <script>
 /* __DESENHOS_INDEX_START__ */
@@ -245,17 +270,21 @@ window.DESENHOS_INDEX = ["13.png", "15p.png", "16.png", "166515_314350715315510_
 </div>
 
 <!-- MONITOR -->
-<div id="log-monitor" style="visibility: hidden;">
-    <strong style="opacity:0.5; font-size:10px; letter-spacing:0.1em">GGUI CONTROL PANEL v7.0</strong>
+<div id="log-monitor">
+    <strong style="opacity:0.5; font-size:10px; letter-spacing:0.1em">GGUI CONTROL PANEL v7.1</strong>
     <hr style="border-color:var(--border); margin:8px 0">
     <div class="config-row"><span>Decay (ms):</span>    <input type="number" id="cfg-decay" value="10000"></div>
     <div class="config-row"><span>Linear Speed:</span>  <input type="number" id="cfg-speed" step="0.1" value="0.1"></div>
     <div class="config-row"><span>Focus Share %:</span> <input type="number" id="cfg-share" value="85"></div>
+    <div class="config-row"><span>Cooldown (qtd):</span><input type="number" id="cfg-cooldown" value="5" min="1" max="20"></div>
     <hr style="border-color:var(--border); margin:8px 0">
     <strong>EM FOCO:</strong> <span id="current-focus">HERO</span><br>
     <strong>PRÓXIMO:</strong> <span id="next-label">--</span><br>
     <strong>DECAY EM:</strong> <span id="decay-timer">--</span>s
     <div id="prob-list" style="margin-top:12px;"></div>
+    <hr style="border-color:var(--border); margin:8px 0">
+    <div style="font-size:9px; opacity:0.35; letter-spacing:0.1em; margin-bottom:6px;">COOLDOWN (últimos mostrados)</div>
+    <div id="cooldown-list"></div>
     <button class="btn-monitor" onclick="openColorModal()">🎨 Editar cores do shader</button>
 </div>
 
@@ -396,15 +425,14 @@ const uWs=['u_w1a','u_w1f','u_w2a','u_w2f','u_w3a','u_w3f'].map(n=>gl.getUniform
 
 function resize(){
     const r = devicePixelRatio || 1;
-    // Safari: usa document.documentElement pra pegar a altura real
-    const w = document.documentElement.clientWidth;
-    const h = document.documentElement.clientHeight;
-    canvas.style.width  = w + 'px';
-    canvas.style.height = h + 'px';
-    canvas.width  = w * r;
-    canvas.height = h * r;
+    // usa getBoundingClientRect pra pegar o tamanho real que o CSS definiu
+    // (incluindo as expansões de safe-area-inset)
+    const rect = canvas.getBoundingClientRect();
+    canvas.width  = Math.round(rect.width  * r);
+    canvas.height = Math.round(rect.height * r);
     gl.viewport(0, 0, canvas.width, canvas.height);
 }
+
 window.addEventListener('resize', resize);
 if (window.visualViewport) {
     window.visualViewport.addEventListener('resize', resize);
@@ -492,10 +520,10 @@ setInterval(detectCenter, 200);
 const LIVE = {
     get decay(){ return parseInt(document.getElementById('cfg-decay').value) },
     get speed(){ return parseFloat(document.getElementById('cfg-speed').value) },
-    get share(){ return parseInt(document.getElementById('cfg-share').value) }
+    get share(){ return parseInt(document.getElementById('cfg-share').value) },
+    get cooldownSize(){ return parseInt(document.getElementById('cfg-cooldown').value) }
 };
 
-// Templates de desenhos são gerados dinamicamente após fetch do JSON
 const templates = {
     ctas: {
         "CONTATOS": `<div class="instancia-container cta-inst"><div class="cta-display">
@@ -531,7 +559,6 @@ const templates = {
     projetos: {}
 };
 
-// Projetos continuam como placeholder
 for(let i=1;i<=5;i++){
     templates.projetos[`P4.${i}`]=`<div class="instancia-container"><div class="proj-card">
         <div class="proj-media">
@@ -566,7 +593,6 @@ function loadDesenhos() {
 
     if (!arquivos.length) {
         console.warn('[ggui] window.DESENHOS_INDEX vazio ou não encontrado.');
-        console.warn('[ggui] Rode gerar_index_desenhos.py para injetar a lista no HTML.');
         templates.desenhos['D3.1'] = `<div class="instancia-container"><div class="art-card">
             <div class="art-loading">rode gerar_index_desenhos.py</div>
         </div></div>`;
@@ -585,6 +611,13 @@ function loadDesenhos() {
 // =============================================
 // ESTADO
 // =============================================
+
+// recentHistory: fila circular dos últimos N itens mostrados (candidate ou committed)
+// itens nessa fila ficam com peso zerado na seleção — mas o peso deles no targetWeights
+// continua subindo normalmente pela lógica de foco, então quando saem da fila voltam
+// com probabilidade cheia imediatamente.
+let recentHistory = []; // ex: ['D3.4', 'CONTATOS', 'D3.12', ...]
+
 let state={
     targetWeights:{}, currentWeights:{},
     focusGroup:'ctas', lastDecayTime:Date.now(),
@@ -618,15 +651,37 @@ setInterval(()=>{
     updateMonitor();
 },50);
 
+function pushHistory(item) {
+    // remove se já estava pra evitar duplicata na fila
+    recentHistory = recentHistory.filter(k => k !== item);
+    recentHistory.unshift(item);
+    // mantém só os últimos N
+    const n = LIVE.cooldownSize;
+    if (recentHistory.length > n) recentHistory = recentHistory.slice(0, n);
+}
+
 function runEngine(){
     if(state.isLocked) return;
-    let pool=Object.keys(state.currentWeights).filter(k=>k!==state.last);
+
+    // pool exclui itens em cooldown
+    let pool = Object.keys(state.currentWeights).filter(k => !recentHistory.includes(k));
+
     if(state.focusGroup==='desenhos') pool=pool.filter(k=>k!=='GO_DESENHOS');
     if(state.focusGroup==='projetos') pool=pool.filter(k=>k!=='GO_PROJETOS');
+
+    // fallback: se todos em cooldown, usa o pool completo (sem o candidato atual)
+    if (pool.length === 0) {
+        pool = Object.keys(state.currentWeights).filter(k => k !== state.currentCandidate);
+        if(state.focusGroup==='desenhos') pool=pool.filter(k=>k!=='GO_DESENHOS');
+        if(state.focusGroup==='projetos') pool=pool.filter(k=>k!=='GO_PROJETOS');
+    }
+
     const total=pool.reduce((a,k)=>a+state.currentWeights[k],0);
     if(total<=0) return;
+
     let rand=Math.random()*total, sel=pool[0];
     for(const key of pool){ if(rand<state.currentWeights[key]){sel=key;break;} rand-=state.currentWeights[key]; }
+
     state.currentCandidate=sel;
     document.getElementById('next-label').innerText=sel;
 
@@ -645,6 +700,8 @@ function injectIntent(group){
     items.forEach(item=>{ state.currentWeights[item]=share; });
     Object.keys(state.currentWeights).forEach(k=>{ if(!items.includes(k)) state.currentWeights[k]=0; });
     state.last = null;
+    // reseta histórico ao mudar de grupo intencionalmente
+    recentHistory = [];
     const firstItem = items[Math.floor(Math.random()*items.length)];
     state.currentCandidate = firstItem;
     document.getElementById('next-label').innerText = firstItem;
@@ -658,16 +715,19 @@ function injectIntent(group){
 function commit(){
     state.isLocked=true;
     const item=state.currentCandidate;
-    state.last=item; state.currentWeights[item]=0;
+    state.last=item;
+
+    // adiciona ao cooldown ao commitar
+    pushHistory(item);
+
+    state.currentWeights[item]=0;
     const area=document.getElementById('candidate-area');
     const div=document.createElement('div');
     div.dataset.itemKey=item;
     div.innerHTML=area.innerHTML;
 
-    // nasce sem .commited → blur ativo
     document.getElementById('timeline').appendChild(div);
 
-    // duplo rAF garante que o browser pintou o frame com blur antes de remover
     requestAnimationFrame(()=>{
         requestAnimationFrame(()=>{
             div.classList.add('commited');
@@ -694,15 +754,33 @@ window.addEventListener('scroll',()=>{
 
 function updateMonitor(){
     document.getElementById('current-focus').innerText=state.focusGroup.toUpperCase();
+
+    // lista de probabilidades
     document.getElementById('prob-list').innerHTML=Object.entries(state.currentWeights)
         .sort((a,b)=>b[1]-a[1]).slice(0,6)
-        .map(([k,v])=>`
+        .map(([k,v])=>{
+            const onCooldown = recentHistory.includes(k);
+            const label = onCooldown ? `${k} <span style="opacity:0.4;color:#f87">[cd:${recentHistory.indexOf(k)+1}]</span>` : k;
+            return `
             <div style="margin-bottom:7px">
-                <div style="display:flex;justify-content:space-between;opacity:0.8"><span>${k}</span><span>${v.toFixed(1)}%</span></div>
+                <div style="display:flex;justify-content:space-between;opacity:${onCooldown?0.3:0.8}"><span>${label}</span><span>${v.toFixed(1)}%</span></div>
                 <div style="width:100%;height:2px;background:rgba(255,255,255,0.08);border-radius:2px;margin-top:3px">
-                    <div class="bar-fill" style="width:${Math.min(v*2,100)}%"></div>
+                    <div class="bar-fill" style="width:${Math.min(v*2,100)}%;opacity:${onCooldown?0.25:1}"></div>
                 </div>
-            </div>`).join('');
+            </div>`;
+        }).join('');
+
+    // lista de cooldown
+    const n = LIVE.cooldownSize;
+    document.getElementById('cooldown-list').innerHTML = recentHistory.length === 0
+        ? '<div style="font-size:9px;opacity:0.25;">vazio</div>'
+        : recentHistory.map((k, i) => {
+            const ratio = (n - i) / n; // 1 = mais recente, ~0 = prestes a sair
+            return `<div class="cooldown-item">
+                <span>[${i+1}] ${k}</span>
+                <div class="cd-bar"><div class="cd-fill" style="width:${ratio*100}%"></div></div>
+            </div>`;
+        }).join('');
 }
 
 // Carrega desenhos e inicia o engine
@@ -752,5 +830,12 @@ document.getElementById('btn-copy-colors').addEventListener('click',()=>{
     });
 });
 </script>
+<div id="debug" style="
+    position:fixed; top:10px; left:10px; z-index:9999;
+    background:red; color:white; font-size:11px;
+    padding:6px; border-radius:4px; font-family:monospace;
+    pointer-events:none;
+    visibility: hidden;
+"></div>
 </body>
 </html>
