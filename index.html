@@ -18,17 +18,20 @@
             background: #0a0a0a; color: var(--text);
             margin: 0; padding-bottom: 60vh;
         }
-        #bg-canvas {
+        #bg-canvas-wrap {
             position: fixed;
-            /* expande pra fora das safe areas em todos os lados */
-            top: calc(-1 * env(safe-area-inset-top, 0px));
-            left: calc(-1 * env(safe-area-inset-left, 0px));
-            right: calc(-1 * env(safe-area-inset-right, 0px));
-            bottom: calc(-1 * env(safe-area-inset-bottom, 0px));
-            width: calc(100% + env(safe-area-inset-left, 0px) + env(safe-area-inset-right, 0px));
-            height: calc(100% + env(safe-area-inset-top, 0px) + env(safe-area-inset-bottom, 0px));
+            top: 0; left: 0; right: 0; bottom: 0;
+            /* hack iOS: força a div a cobrir a tela inteira incluindo barras do sistema */
+            height: 100vh;
+            height: -webkit-fill-available;
+            height: 100dvh;
             z-index: 0;
             pointer-events: none;
+        }
+        #bg-canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
         }
 
         html, body {
@@ -38,13 +41,6 @@
         #wrapper, #log-monitor, #color-modal-overlay { position: relative; z-index: 1; }
 
         /* MONITOR */
-        #log-monitor {
-            position: fixed; bottom: 20px; right: 20px; width: 300px;
-            background: rgba(5,5,5,0.88); backdrop-filter: blur(12px);
-            padding: 16px; border: 1px solid var(--border);
-            border-radius: 12px; z-index: 1000; font-family: monospace; font-size: 11px;
-            box-shadow: 0 15px 35px rgba(0,0,0,0.5); color: var(--text);
-        }
         .config-row { display: flex; justify-content: space-between; margin-bottom: 5px; align-items: center; }
         .config-row input {
             width: 60px; font-size: 10px;
@@ -224,6 +220,34 @@
         #sobre-mim .cta-display h2 { font-weight: 900; }
         .bar-fill { height: 100%; background: rgba(255,255,255,0.5); transition: width 0.3s; }
 
+        /* botão flutuante de engrenagem */
+        #monitor-toggle {
+            position: fixed; bottom: 20px; right: 20px;
+            width: 38px; height: 38px; border-radius: 50%;
+            background: rgba(5,5,5,0.75); backdrop-filter: blur(10px);
+            border: 1px solid var(--border);
+            color: var(--text); font-size: 16px;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; z-index: 1001;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+            transition: background 0.2s, transform 0.2s;
+            user-select: none;
+        }
+        #monitor-toggle:hover { background: rgba(40,40,40,0.9); transform: rotate(30deg); }
+        #monitor-toggle.open { transform: rotate(90deg); }
+        #monitor-toggle.open:hover { transform: rotate(60deg); }
+
+        /* MONITOR — começa fechado */
+        #log-monitor {
+            position: fixed; bottom: 68px; right: 20px; width: 300px;
+            background: rgba(5,5,5,0.88); backdrop-filter: blur(12px);
+            padding: 16px; border: 1px solid var(--border);
+            border-radius: 12px; z-index: 1000; font-family: monospace; font-size: 11px;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.5); color: var(--text);
+            display: none;
+        }
+        #log-monitor.visible { display: block; }
+
         /* cooldown badge no monitor */
         #cooldown-list { margin-top: 10px; }
         .cooldown-item {
@@ -246,7 +270,9 @@ window.DESENHOS_INDEX = ["13.png", "15p.png", "16.png", "166515_314350715315510_
 </head>
 <body>
 
+<div id="bg-canvas-wrap">
 <canvas id="bg-canvas"></canvas>
+</div>
 
 <!-- MODAL DE CORES -->
 <div id="color-modal-overlay">
@@ -269,14 +295,20 @@ window.DESENHOS_INDEX = ["13.png", "15p.png", "16.png", "166515_314350715315510_
     </div>
 </div>
 
+<!-- BOTÃO ENGRENAGEM -->
+<button id="monitor-toggle" title="GGUI Control Panel">⚙</button>
+
 <!-- MONITOR -->
 <div id="log-monitor">
-    <strong style="opacity:0.5; font-size:10px; letter-spacing:0.1em">GGUI CONTROL PANEL v7.1</strong>
+    <strong style="opacity:0.5; font-size:10px; letter-spacing:0.1em">GGUI CONTROL PANEL v7.2</strong>
     <hr style="border-color:var(--border); margin:8px 0">
     <div class="config-row"><span>Decay (ms):</span>    <input type="number" id="cfg-decay" value="10000"></div>
     <div class="config-row"><span>Linear Speed:</span>  <input type="number" id="cfg-speed" step="0.1" value="0.1"></div>
     <div class="config-row"><span>Focus Share %:</span> <input type="number" id="cfg-share" value="85"></div>
     <div class="config-row"><span>Cooldown (qtd):</span><input type="number" id="cfg-cooldown" value="5" min="1" max="20"></div>
+    <hr style="border-color:var(--border); margin:8px 0">
+    <div style="font-size:9px;opacity:0.35;letter-spacing:0.1em;margin-bottom:6px;">SHADER / CANVAS</div>
+    <div class="config-row"><span>V Overshoot:</span>   <input type="number" id="cfg-overshoot" step="0.05" value="1.0" title="multiplica a altura do canvas no GL — >1 renderiza além da borda inferior"></div>
     <hr style="border-color:var(--border); margin:8px 0">
     <strong>EM FOCO:</strong> <span id="current-focus">HERO</span><br>
     <strong>PRÓXIMO:</strong> <span id="next-label">--</span><br>
@@ -293,7 +325,7 @@ window.DESENHOS_INDEX = ["13.png", "15p.png", "16.png", "166515_314350715315510_
         <div class="cta-display">
             <div class="cta-eyebrow" id="hero-eyebrow">—</div>
             <h2 id="hero-greeting"></h2>
-            <div class="cta-sub">essa experiência foi desenhada<br>e desenvolvida por wAyne</div>
+            <div class="cta-sub">e se a UX fosse procedural?<br>↓↓↓↓↓↓↓↓↓↓↓*infinito<br>experimento de wayne</div>
         </div>
     </section>
     <div id="timeline"></div>
@@ -425,13 +457,19 @@ const uWs=['u_w1a','u_w1f','u_w2a','u_w2f','u_w3a','u_w3f'].map(n=>gl.getUniform
 
 function resize(){
     const r = devicePixelRatio || 1;
-    // usa getBoundingClientRect pra pegar o tamanho real que o CSS definiu
-    // (incluindo as expansões de safe-area-inset)
-    const rect = canvas.getBoundingClientRect();
-    canvas.width  = Math.round(rect.width  * r);
-    canvas.height = Math.round(rect.height * r);
+    const wrap = canvas.parentElement;
+    const w = wrap.clientWidth;
+    const h = wrap.clientHeight;
+    const overshoot = parseFloat(document.getElementById('cfg-overshoot')?.value || 1.0);
+    canvas.width  = Math.round(w * r);
+    canvas.height = Math.round(h * r * overshoot);
     gl.viewport(0, 0, canvas.width, canvas.height);
 }
+
+// re-dispara resize quando overshoot muda
+document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('cfg-overshoot')?.addEventListener('input', resize);
+});
 
 window.addEventListener('resize', resize);
 if (window.visualViewport) {
@@ -528,7 +566,7 @@ const templates = {
     ctas: {
         "CONTATOS": `<div class="instancia-container cta-inst"><div class="cta-display">
             <div class="cta-eyebrow">Contato</div>
-            <h2>Onde encontrar<br>wayne?</h2>
+            <h2>onde encontrar<br>wayne?</h2>
             <div class="cta-sub">Aberto pra projetos, collabs<br>e conversas interessantes.</div>
             <div class="cta-links">
                 <a href="#">LinkedIn</a>
@@ -539,7 +577,7 @@ const templates = {
 
         "GO_DESENHOS": `<div class="instancia-container cta-inst"><div class="cta-display">
             <div class="cta-eyebrow">Sketchbook</div>
-            <h2>Quer ver<br>umas artes?</h2>
+            <h2>focar em<br>artes?</h2>
             <div class="cta-sub">Só rabiscada descompromissada<br>e antiga (um dia eu upo tudo)</div>
             <button class="cta-action" onclick="injectIntent('desenhos')">
                 <span>Focar</span><span class="arr">→</span>
@@ -548,7 +586,7 @@ const templates = {
 
         "GO_PROJETOS": `<div class="instancia-container cta-inst"><div class="cta-display">
             <div class="cta-eyebrow">Portfolio</div>
-            <h2>Quer ver<br>cases?</h2>
+            <h2>focar em<br>cases?</h2>
             <div class="cta-sub">Cases de sistemas, design ux, produtos digitais, jogos, e outras coisas<br>(inclusive essa experiência aqui)</div>
             <button class="cta-action" onclick="injectIntent('projetos')">
                 <span>Focar</span><span class="arr">→</span>
@@ -734,8 +772,11 @@ function commit(){
         });
     });
 
+    // limpa a área e já sorteia o próximo imediatamente (sem esperar o timeout)
+    // pra não ter vazio visível quando o usuário continua scrollando
     area.innerHTML=''; area.dataset.currentKey='';
-    setTimeout(()=>{ state.isLocked=false; runEngine(); },500);
+    state.isLocked=false;
+    runEngine();
 }
 
 setInterval(()=>{
@@ -787,6 +828,19 @@ function updateMonitor(){
 loadDesenhos();
 init();
 setInterval(runEngine, 400);
+
+// =============================================
+// MONITOR TOGGLE
+// =============================================
+(function() {
+    const btn = document.getElementById('monitor-toggle');
+    const panel = document.getElementById('log-monitor');
+    btn.addEventListener('click', () => {
+        const isOpen = panel.classList.toggle('visible');
+        btn.classList.toggle('open', isOpen);
+        btn.textContent = isOpen ? '✕' : '⚙';
+    });
+})();
 
 // =============================================
 // COLOR MODAL
