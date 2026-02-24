@@ -21,7 +21,6 @@
         #bg-canvas-wrap {
             position: fixed;
             top: 0; left: 0; right: 0; bottom: 0;
-            /* hack iOS: força a div a cobrir a tela inteira incluindo barras do sistema */
             height: 100vh;
             height: -webkit-fill-available;
             height: 100dvh;
@@ -102,7 +101,6 @@
         .commited .instancia-container { opacity: 1; }
         .instancia-container.cta-inst { opacity: 1; }
 
-        /* blur no candidato, some ao commitar */
         #candidate-area .instancia-container {
             filter: blur(8px);
             transition: filter 0.7s ease;
@@ -157,7 +155,6 @@
             overflow: hidden;
             position: relative;
         }
-
         .art-card img {
             width: 100%;
             height: 100%;
@@ -175,9 +172,7 @@
         }
 
         /* PROJETO */
-        .proj-card {
-            width: min(80vw, 600px);
-        }
+        .proj-card { width: min(80vw, 600px); }
         .proj-media {
             width: 100%; aspect-ratio: 16 / 9; border-radius: 8px;
             overflow: hidden; position: relative; margin-bottom: 24px;
@@ -220,24 +215,96 @@
         #sobre-mim .cta-display h2 { font-weight: 900; }
         .bar-fill { height: 100%; background: rgba(255,255,255,0.5); transition: width 0.3s; }
 
-        /* botão flutuante de engrenagem */
+        /* =============================================
+           BOTÃO ENGRENAGEM + PÍLULA DE FOCO
+           ============================================= */
+        #monitor-wrap {
+            position: fixed;
+            bottom: 20px; right: 20px;
+            z-index: 1001;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 0;
+        }
+
+        /* pílula de status — expande da direita pra esquerda */
+        #focus-pill {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(5,5,5,0.82);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border);
+            border-right: none;
+            border-radius: 999px 0 0 999px;
+            padding: 0 14px 0 16px;
+            height: 38px;
+            font-family: monospace;
+            font-size: 10px;
+            color: var(--text);
+            letter-spacing: 0.08em;
+            white-space: nowrap;
+            overflow: hidden;
+
+            /* começa colapsada (largura 0) */
+            max-width: 0;
+            opacity: 0;
+            pointer-events: none;
+            transition: max-width 0.4s cubic-bezier(0.4,0,0.2,1),
+                        opacity 0.3s ease,
+                        padding 0.4s ease;
+        }
+        #focus-pill.visible {
+            max-width: 260px;
+            opacity: 1;
+            pointer-events: auto;
+            padding: 0 14px 0 16px;
+        }
+        #focus-pill.hidden-pill {
+            max-width: 0;
+            opacity: 0;
+            pointer-events: none;
+            padding: 0;
+        }
+
+        #pill-dot {
+            width: 6px; height: 6px; border-radius: 50%;
+            background: currentColor;
+            flex-shrink: 0;
+            transition: background 0.4s;
+        }
+        #pill-text {
+            opacity: 0.7;
+        }
+        #pill-timer {
+            opacity: 0.35;
+            margin-left: 2px;
+        }
+
+        /* botão engrenagem */
         #monitor-toggle {
-            position: fixed; bottom: 20px; right: 20px;
             width: 38px; height: 38px; border-radius: 50%;
-            background: rgba(5,5,5,0.75); backdrop-filter: blur(10px);
+            background: rgba(5,5,5,0.82); backdrop-filter: blur(12px);
             border: 1px solid var(--border);
             color: var(--text); font-size: 16px;
             display: flex; align-items: center; justify-content: center;
-            cursor: pointer; z-index: 1001;
+            cursor: pointer;
             box-shadow: 0 4px 16px rgba(0,0,0,0.4);
-            transition: background 0.2s, transform 0.2s;
+            transition: background 0.2s, transform 0.3s ease;
             user-select: none;
+            flex-shrink: 0;
         }
-        #monitor-toggle:hover { background: rgba(40,40,40,0.9); transform: rotate(30deg); }
+        /* quando a pílula está visível, o botão perde a borda esquerda redonda */
+        #focus-pill.visible + #monitor-toggle {
+            border-radius: 0 999px 999px 0;
+            border-left-color: transparent;
+        }
+        #monitor-toggle:hover { background: rgba(40,40,40,0.92); }
+        #monitor-toggle:not(.open):hover { transform: rotate(25deg); }
         #monitor-toggle.open { transform: rotate(90deg); }
-        #monitor-toggle.open:hover { transform: rotate(60deg); }
 
-        /* MONITOR — começa fechado */
+        /* MONITOR — painel */
         #log-monitor {
             position: fixed; bottom: 68px; right: 20px; width: 300px;
             background: rgba(5,5,5,0.88); backdrop-filter: blur(12px);
@@ -248,7 +315,7 @@
         }
         #log-monitor.visible { display: block; }
 
-        /* cooldown badge no monitor */
+        /* cooldown */
         #cooldown-list { margin-top: 10px; }
         .cooldown-item {
             font-size: 9px; opacity: 0.35; letter-spacing: 0.08em;
@@ -295,12 +362,19 @@ window.DESENHOS_INDEX = ["13.png", "15p.png", "16.png", "166515_314350715315510_
     </div>
 </div>
 
-<!-- BOTÃO ENGRENAGEM -->
-<button id="monitor-toggle" title="GGUI Control Panel">⚙</button>
+<!-- ENGRENAGEM + PÍLULA -->
+<div id="monitor-wrap">
+    <div id="focus-pill">
+        <div id="pill-dot"></div>
+        <span id="pill-text">ctas</span>
+        <span id="pill-timer"></span>
+    </div>
+    <button id="monitor-toggle" title="GGUI Control Panel">⚙</button>
+</div>
 
 <!-- MONITOR -->
 <div id="log-monitor">
-    <strong style="opacity:0.5; font-size:10px; letter-spacing:0.1em">GGUI CONTROL PANEL v7.2</strong>
+    <strong style="opacity:0.5; font-size:10px; letter-spacing:0.1em">GGUI CONTROL PANEL v7.3</strong>
     <hr style="border-color:var(--border); margin:8px 0">
     <div class="config-row"><span>Decay (ms):</span>    <input type="number" id="cfg-decay" value="10000"></div>
     <div class="config-row"><span>Linear Speed:</span>  <input type="number" id="cfg-speed" step="0.1" value="0.1"></div>
@@ -308,7 +382,7 @@ window.DESENHOS_INDEX = ["13.png", "15p.png", "16.png", "166515_314350715315510_
     <div class="config-row"><span>Cooldown (qtd):</span><input type="number" id="cfg-cooldown" value="5" min="1" max="20"></div>
     <hr style="border-color:var(--border); margin:8px 0">
     <div style="font-size:9px;opacity:0.35;letter-spacing:0.1em;margin-bottom:6px;">SHADER / CANVAS</div>
-    <div class="config-row"><span>V Overshoot:</span>   <input type="number" id="cfg-overshoot" step="0.05" value="1.0" title="multiplica a altura do canvas no GL — >1 renderiza além da borda inferior"></div>
+    <div class="config-row"><span>V Overshoot:</span>   <input type="number" id="cfg-overshoot" step="0.05" value="1.0"></div>
     <hr style="border-color:var(--border); margin:8px 0">
     <strong>EM FOCO:</strong> <span id="current-focus">HERO</span><br>
     <strong>PRÓXIMO:</strong> <span id="next-label">--</span><br>
@@ -466,7 +540,6 @@ function resize(){
     gl.viewport(0, 0, canvas.width, canvas.height);
 }
 
-// re-dispara resize quando overshoot muda
 document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('cfg-overshoot')?.addEventListener('input', resize);
 });
@@ -586,8 +659,8 @@ const templates = {
 
         "GO_PROJETOS": `<div class="instancia-container cta-inst"><div class="cta-display">
             <div class="cta-eyebrow">Portfolio</div>
-            <h2>focar em<br>cases?</h2>
-            <div class="cta-sub">Cases de sistemas, design ux, produtos digitais, jogos, e outras coisas<br>(inclusive essa experiência aqui)</div>
+            <h2>focar em<br>projetos?</h2>
+            <div class="cta-sub">Projetos: de sistemas, design ux, produtos digitais, jogos, e outras coisas<br>(inclusive essa experiência aqui)</div>
             <button class="cta-action" onclick="injectIntent('projetos')">
                 <span>Focar</span><span class="arr">→</span>
             </button>
@@ -606,55 +679,38 @@ for(let i=1;i<=5;i++){
         </div>
         <div class="proj-info">
             <div class="proj-eyebrow">PROJ — 4.${i}</div>
-            <h3>Case de Sistema ${i}</h3>
+            <h3>projeto ${i}</h3>
             <p>Placeholder — descreva aqui a intenção do projeto, o problema que ele resolve e as decisões que tornaram a solução possível.</p>
         </div>
     </div></div>`;
 }
 
-// =============================================
-// CARREGA DESENHOS DO JSON
-// =============================================
 function buildDesenhoTemplate(filename, index) {
     const src = `desenhos/${filename}`;
     return `<div class="instancia-container"><div class="art-card">
-        <img
-            src="${src}"
-            alt="desenho ${index + 1}"
-            loading="lazy"
-        >
+        <img src="${src}" alt="desenho ${index + 1}" loading="lazy">
     </div></div>`;
 }
 
 function loadDesenhos() {
     const arquivos = window.DESENHOS_INDEX || [];
-
     if (!arquivos.length) {
-        console.warn('[ggui] window.DESENHOS_INDEX vazio ou não encontrado.');
         templates.desenhos['D3.1'] = `<div class="instancia-container"><div class="art-card">
             <div class="art-loading">rode gerar_index_desenhos.py</div>
         </div></div>`;
         return;
     }
-
     templates.desenhos = {};
     arquivos.forEach((filename, i) => {
-        const key = `D3.${i + 1}`;
-        templates.desenhos[key] = buildDesenhoTemplate(filename, i);
+        templates.desenhos[`D3.${i + 1}`] = buildDesenhoTemplate(filename, i);
     });
-
     console.log(`[ggui] ${arquivos.length} desenho(s) carregado(s).`);
 }
 
 // =============================================
 // ESTADO
 // =============================================
-
-// recentHistory: fila circular dos últimos N itens mostrados (candidate ou committed)
-// itens nessa fila ficam com peso zerado na seleção — mas o peso deles no targetWeights
-// continua subindo normalmente pela lógica de foco, então quando saem da fila voltam
-// com probabilidade cheia imediatamente.
-let recentHistory = []; // ex: ['D3.4', 'CONTATOS', 'D3.12', ...]
+let recentHistory = [];
 
 let state={
     targetWeights:{}, currentWeights:{},
@@ -671,7 +727,71 @@ function init(){
     calculateTargets('ctas'); runEngine();
 }
 
-function calculateTargets(focus){
+// =============================================
+// PÍLULA DE FOCO
+// =============================================
+const FOCUS_LABELS = {
+    ctas:     'modo livre',
+    desenhos: 'focando em artes',
+    projetos: 'focando em projetos',
+};
+const FOCUS_COLORS = {
+    ctas:     '#45f287',
+    desenhos: '#257e43',
+    projetos: '#374fae',
+};
+
+let pillHideTimeout = null;
+
+function updatePill(group, decayRemaining) {
+    const pill = document.getElementById('focus-pill');
+    const dot  = document.getElementById('pill-dot');
+    const text = document.getElementById('pill-text');
+    const timer = document.getElementById('pill-timer');
+
+    const label = FOCUS_LABELS[group] || group;
+    const color = FOCUS_COLORS[group] || '#fff';
+
+    dot.style.background = color;
+    text.textContent = label;
+
+    if (group !== 'ctas' && decayRemaining > 0) {
+        timer.textContent = `· ${Math.ceil(decayRemaining)}s`;
+    } else {
+        timer.textContent = '';
+    }
+}
+
+function showPill() {
+    const pill = document.getElementById('focus-pill');
+    if (pillHideTimeout) { clearTimeout(pillHideTimeout); pillHideTimeout = null; }
+    pill.classList.remove('hidden-pill');
+    pill.classList.add('visible');
+}
+
+function hidePill(delay = 3000) {
+    if (pillHideTimeout) clearTimeout(pillHideTimeout);
+    pillHideTimeout = setTimeout(() => {
+        const pill = document.getElementById('focus-pill');
+        pill.classList.remove('visible');
+        pill.classList.add('hidden-pill');
+    }, delay);
+}
+
+function onFocusChanged(group) {
+    updatePill(group, 0);
+    showPill();
+    // pra modo livre some depois de 3s; pra foco ativo some quando acabar o decay
+    if (group === 'ctas') {
+        hidePill(2500);
+    }
+    // se foco ativo, a pílula fica visível enquanto tiver decay — gerenciado no setInterval abaixo
+}
+
+// =============================================
+
+function calculateTargets(focus, fromDecay){
+    const prev = state.focusGroup;
     state.focusGroup=focus; state.lastDecayTime=Date.now();
     const groups=Object.keys(templates);
     groups.forEach(g=>{
@@ -679,6 +799,10 @@ function calculateTargets(focus){
         const items=Object.keys(templates[g]);
         items.forEach(item=>{ state.targetWeights[item]=share/items.length; });
     });
+
+    if (prev !== focus) {
+        onFocusChanged(focus);
+    }
 }
 
 setInterval(()=>{
@@ -690,10 +814,8 @@ setInterval(()=>{
 },50);
 
 function pushHistory(item) {
-    // remove se já estava pra evitar duplicata na fila
     recentHistory = recentHistory.filter(k => k !== item);
     recentHistory.unshift(item);
-    // mantém só os últimos N
     const n = LIVE.cooldownSize;
     if (recentHistory.length > n) recentHistory = recentHistory.slice(0, n);
 }
@@ -701,13 +823,10 @@ function pushHistory(item) {
 function runEngine(){
     if(state.isLocked) return;
 
-    // pool exclui itens em cooldown
     let pool = Object.keys(state.currentWeights).filter(k => !recentHistory.includes(k));
-
     if(state.focusGroup==='desenhos') pool=pool.filter(k=>k!=='GO_DESENHOS');
     if(state.focusGroup==='projetos') pool=pool.filter(k=>k!=='GO_PROJETOS');
 
-    // fallback: se todos em cooldown, usa o pool completo (sem o candidato atual)
     if (pool.length === 0) {
         pool = Object.keys(state.currentWeights).filter(k => k !== state.currentCandidate);
         if(state.focusGroup==='desenhos') pool=pool.filter(k=>k!=='GO_DESENHOS');
@@ -738,7 +857,6 @@ function injectIntent(group){
     items.forEach(item=>{ state.currentWeights[item]=share; });
     Object.keys(state.currentWeights).forEach(k=>{ if(!items.includes(k)) state.currentWeights[k]=0; });
     state.last = null;
-    // reseta histórico ao mudar de grupo intencionalmente
     recentHistory = [];
     const firstItem = items[Math.floor(Math.random()*items.length)];
     state.currentCandidate = firstItem;
@@ -754,26 +872,16 @@ function commit(){
     state.isLocked=true;
     const item=state.currentCandidate;
     state.last=item;
-
-    // adiciona ao cooldown ao commitar
     pushHistory(item);
-
     state.currentWeights[item]=0;
     const area=document.getElementById('candidate-area');
     const div=document.createElement('div');
     div.dataset.itemKey=item;
     div.innerHTML=area.innerHTML;
-
     document.getElementById('timeline').appendChild(div);
-
     requestAnimationFrame(()=>{
-        requestAnimationFrame(()=>{
-            div.classList.add('commited');
-        });
+        requestAnimationFrame(()=>{ div.classList.add('commited'); });
     });
-
-    // limpa a área e já sorteia o próximo imediatamente (sem esperar o timeout)
-    // pra não ter vazio visível quando o usuário continua scrollando
     area.innerHTML=''; area.dataset.currentKey='';
     state.isLocked=false;
     runEngine();
@@ -783,8 +891,18 @@ setInterval(()=>{
     if(state.focusGroup!=='ctas'){
         const rem=Math.max(0,(LIVE.decay-(Date.now()-state.lastDecayTime))/1000);
         document.getElementById('decay-timer').innerText=rem.toFixed(1);
-        if(rem<=0) calculateTargets('ctas');
-    } else { document.getElementById('decay-timer').innerText='--'; }
+
+        // atualiza o timer na pílula e mantém visível
+        updatePill(state.focusGroup, rem);
+        if (rem > 0) {
+            showPill();
+        } else {
+            // decay expirou → volta pro modo livre
+            calculateTargets('ctas');
+        }
+    } else {
+        document.getElementById('decay-timer').innerText='--';
+    }
 },100);
 
 window.addEventListener('scroll',()=>{
@@ -796,7 +914,6 @@ window.addEventListener('scroll',()=>{
 function updateMonitor(){
     document.getElementById('current-focus').innerText=state.focusGroup.toUpperCase();
 
-    // lista de probabilidades
     document.getElementById('prob-list').innerHTML=Object.entries(state.currentWeights)
         .sort((a,b)=>b[1]-a[1]).slice(0,6)
         .map(([k,v])=>{
@@ -811,12 +928,11 @@ function updateMonitor(){
             </div>`;
         }).join('');
 
-    // lista de cooldown
     const n = LIVE.cooldownSize;
     document.getElementById('cooldown-list').innerHTML = recentHistory.length === 0
         ? '<div style="font-size:9px;opacity:0.25;">vazio</div>'
         : recentHistory.map((k, i) => {
-            const ratio = (n - i) / n; // 1 = mais recente, ~0 = prestes a sair
+            const ratio = (n - i) / n;
             return `<div class="cooldown-item">
                 <span>[${i+1}] ${k}</span>
                 <div class="cd-bar"><div class="cd-fill" style="width:${ratio*100}%"></div></div>
@@ -824,7 +940,6 @@ function updateMonitor(){
         }).join('');
 }
 
-// Carrega desenhos e inicia o engine
 loadDesenhos();
 init();
 setInterval(runEngine, 400);
@@ -833,7 +948,7 @@ setInterval(runEngine, 400);
 // MONITOR TOGGLE
 // =============================================
 (function() {
-    const btn = document.getElementById('monitor-toggle');
+    const btn   = document.getElementById('monitor-toggle');
     const panel = document.getElementById('log-monitor');
     btn.addEventListener('click', () => {
         const isOpen = panel.classList.toggle('visible');
