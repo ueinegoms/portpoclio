@@ -863,16 +863,29 @@ function onFocusChanged(group) {
 
 function calculateTargets(focus, fromDecay){
     const prev = state.focusGroup;
-    state.focusGroup=focus; state.lastDecayTime=Date.now();
-    const groups=Object.keys(templates);
-    groups.forEach(g=>{
-        const share=(g===focus)?LIVE.share:(100-LIVE.share)/(groups.length-1);
-        const items=Object.keys(templates[g]);
-        items.forEach(item=>{ state.targetWeights[item]=share/items.length; });
+    state.focusGroup = focus;
+    state.lastDecayTime = Date.now();
+
+    const groups = Object.keys(templates);
+    const numGroups = groups.length;
+
+    groups.forEach(g => {
+        const isFocused = g === focus;
+        const share = isFocused ? LIVE.share : (100 - LIVE.share) / (numGroups - 1);
+        const items = Object.keys(templates[g]);
+        items.forEach(item => {
+            state.targetWeights[item] = share / items.length;
+        });
+    });
+
+    // injeta pesos imediatamente sem esperar o lerp
+    Object.keys(state.targetWeights).forEach(k => {
+        state.currentWeights[k] = state.targetWeights[k];
     });
 
     if (prev !== focus) {
         onFocusChanged(focus);
+        runEngine(true);
     }
 }
 
@@ -889,13 +902,20 @@ setInterval(()=>{
  * O fator sobe de 0→1 ao longo do tempo de cooldown configurado.
  * Isso garante que um item visto agora pouco nunca apareça de cara dnv.
  */
-function runEngine(){
+function runEngine(force){
     if(state.isLocked) return;
+
+    // só sorteia novo candidato se a area estiver vazia (commit aconteceu)
+    // ou se force=true (troca de foco explícita)
+    const area = document.getElementById('candidate-area');
+    if (!force && area.children.length > 0) return;
 
     const allKeys = Object.keys(state.currentWeights);
 
     // monta pool com probabilidade efetiva = peso × cooldownFactor
+    // exclui o candidato atual — nunca sorteia o mesmo 2x seguidas
     let pool = allKeys.filter(k => {
+        if (k === state.currentCandidate) return false;
         if (state.focusGroup==='desenhos' && k==='GO_DESENHOS') return false;
         if (state.focusGroup==='projetos' && k==='GO_PROJETOS') return false;
         return true;
@@ -935,7 +955,6 @@ function runEngine(){
     state.currentCandidate = sel;
     document.getElementById('next-label').innerText = sel;
 
-    const area = document.getElementById('candidate-area');
     area.dataset.currentKey = sel;
     for(const g in templates){
         if(templates[g][sel]){ area.innerHTML=templates[g][sel]; break; }
@@ -974,16 +993,14 @@ function injectIntent(group){
     }
     // Limpa candidate
     area.innerHTML = ''; area.dataset.currentKey = '';
+    state.currentCandidate = null;
 
-    // 2. Reseta sessão do grupo
-    if (sessionSeen[group]) sessionSeen[group] = new Set();
+    // sessao nao reseta — acumula tudo desde o inicio da visita
 
-    // 3. Aplica foco
+    // 3. Aplica foco — bloqueia runEngine durante a transição
+    state.isLocked = true;
     calculateTargets(group);
-    const items = Object.keys(templates[group]);
-    const share = LIVE.share / items.length;
-    items.forEach(item => { state.currentWeights[item] = share; });
-    Object.keys(state.currentWeights).forEach(k => { if(!items.includes(k)) state.currentWeights[k] = 0; });
+    state.isLocked = false;
 
     // 4. Dado viciado: prefere itens nao na fila de recencia (nunca vistos)
     const available = items.filter(k => !recencyQueue.includes(k));
