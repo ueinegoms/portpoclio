@@ -765,12 +765,13 @@ const recencyQueue = [];
 
 function getCooldownFactor(key) {
     const idx = recencyQueue.indexOf(key);
-    if (idx === -1) return 1.0; // nunca visto
+    if (idx === -1) return 1.0; // nunca visto — maxima chance
     const n = recencyQueue.length;
-    // idx=0 eh o mais antigo, idx=n-1 o mais recente
-    // fator vai de ~0 (mais recente) a (n-1)/(n+1) (mais antigo)
-    // nunca chega a 0 nem a 1 exato — evita travar
-    return idx / (n + 1);
+    // idx=0 eh o mais antigo → fator alto (quase 1)
+    // idx=n-1 eh o mais recente → fator baixo (quase 0)
+    // fator = (n - idx) / (n + 1)
+    // ex: n=3: antigo=3/4=0.75, meio=2/4=0.5, recente=1/4=0.25
+    return (n - idx) / (n + 1);
 }
 
 function markSeen(key) {
@@ -1032,7 +1033,8 @@ function commit(){
                     : 'ctas';
     if (sessionSeen[itemGroup]) sessionSeen[itemGroup].add(item);
 
-    state.currentWeights[item]=0;
+    // nao zera currentWeights — a recencyQueue ja penaliza com fator ~0
+    // zerando aqui o item sumia permanentemente ate o lerp subir de volta
     const area=document.getElementById('candidate-area');
     const div=document.createElement('div');
     div.dataset.itemKey=item;
