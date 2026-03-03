@@ -228,7 +228,7 @@
             gap: 0;
         }
 
-        /* pílula de status — expande da direita pra esquerda */
+        /* pílula de status */
         #focus-pill {
             display: flex;
             align-items: center;
@@ -246,8 +246,6 @@
             letter-spacing: 0.08em;
             white-space: nowrap;
             overflow: hidden;
-
-            /* começa colapsada (largura 0) */
             max-width: 0;
             opacity: 0;
             pointer-events: none;
@@ -256,7 +254,7 @@
                         padding 0.4s ease;
         }
         #focus-pill.visible {
-            max-width: 260px;
+            max-width: 320px;
             opacity: 1;
             pointer-events: auto;
             padding: 0 14px 0 16px;
@@ -274,12 +272,40 @@
             flex-shrink: 0;
             transition: background 0.4s;
         }
-        #pill-text {
-            opacity: 0.7;
+        #pill-text { opacity: 0.7; }
+        #pill-timer { opacity: 0.35; margin-left: 2px; }
+
+        /* botão parar foco dentro da pílula */
+        #pill-stop {
+            width: 18px; height: 18px; border-radius: 50%;
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.18);
+            color: rgba(255,255,255,0.55);
+            font-size: 8px;
+            display: none; align-items: center; justify-content: center;
+            cursor: pointer; flex-shrink: 0;
+            transition: background 0.2s, color 0.2s;
+            line-height: 1;
         }
-        #pill-timer {
-            opacity: 0.35;
-            margin-left: 2px;
+        #pill-stop:hover { background: rgba(255,80,80,0.25); color: #f87; border-color: rgba(255,80,80,0.4); }
+        #focus-pill.active-focus #pill-stop { display: flex; }
+
+        /* barra de progresso de sessão no CTA */
+        .session-progress-wrap { margin-top: 28px; }
+        .session-progress-label {
+            font-family: monospace; font-size: 0.62rem;
+            letter-spacing: 0.14em; opacity: 0.3; text-transform: uppercase;
+            margin-bottom: 8px; display: flex; justify-content: space-between;
+        }
+        .session-progress-track {
+            width: 100%; height: 2px;
+            background: rgba(255,255,255,0.08);
+            border-radius: 2px; overflow: hidden;
+        }
+        .session-progress-fill {
+            height: 100%; border-radius: 2px;
+            background: var(--session-color, #45f287);
+            transition: width 0.6s cubic-bezier(0.4,0,0.2,1);
         }
 
         /* botão engrenagem */
@@ -295,7 +321,6 @@
             user-select: none;
             flex-shrink: 0;
         }
-        /* quando a pílula está visível, o botão perde a borda esquerda redonda */
         #focus-pill.visible + #monitor-toggle {
             border-radius: 0 999px 999px 0;
             border-left-color: transparent;
@@ -320,13 +345,17 @@
         .cooldown-item {
             font-size: 9px; opacity: 0.35; letter-spacing: 0.08em;
             display: flex; justify-content: space-between; margin-bottom: 3px;
+            align-items: center; gap: 6px;
         }
         .cooldown-item .cd-bar {
             width: 60px; height: 3px; background: rgba(255,255,255,0.08);
-            border-radius: 2px; margin-top: 2px; overflow: hidden;
+            border-radius: 2px; overflow: hidden; flex-shrink: 0;
         }
         .cooldown-item .cd-fill {
             height: 100%; background: rgba(255,100,80,0.5); transition: width 0.3s;
+        }
+        .cooldown-item .cd-time {
+            opacity: 0.5; font-size: 8px; min-width: 28px; text-align: right;
         }
     </style>
 <script>
@@ -368,18 +397,18 @@ window.DESENHOS_INDEX = ["13.png", "15p.png", "16.png", "166515_314350715315510_
         <div id="pill-dot"></div>
         <span id="pill-text">ctas</span>
         <span id="pill-timer"></span>
+        <button id="pill-stop" title="Parar foco">✕</button>
     </div>
     <button id="monitor-toggle" title="GGUI Control Panel">⚙</button>
 </div>
 
 <!-- MONITOR -->
 <div id="log-monitor">
-    <strong style="opacity:0.5; font-size:10px; letter-spacing:0.1em">GGUI CONTROL PANEL v7.3</strong>
+    <strong style="opacity:0.5; font-size:10px; letter-spacing:0.1em">GGUI CONTROL PANEL v7.6</strong>
     <hr style="border-color:var(--border); margin:8px 0">
-    <div class="config-row"><span>Decay (ms):</span>    <input type="number" id="cfg-decay" value="30000"></div>
+    <div class="config-row"><span>Decay (ms):</span>    <input type="number" id="cfg-decay" value="12000"></div>
     <div class="config-row"><span>Linear Speed:</span>  <input type="number" id="cfg-speed" step="0.1" value="0.1"></div>
-    <div class="config-row"><span>Focus Share %:</span> <input type="number" id="cfg-share" value="85"></div>
-    <div class="config-row"><span>Cooldown (qtd):</span><input type="number" id="cfg-cooldown" value="5" min="1" max="20"></div>
+    <div class="config-row"><span>Focus Share %:</span> <input type="number" id="cfg-share" value="86"></div>
     <hr style="border-color:var(--border); margin:8px 0">
     <div style="font-size:9px;opacity:0.35;letter-spacing:0.1em;margin-bottom:6px;">SHADER / CANVAS</div>
     <div class="config-row"><span>V Overshoot:</span>   <input type="number" id="cfg-overshoot" step="0.05" value="1.0"></div>
@@ -389,7 +418,7 @@ window.DESENHOS_INDEX = ["13.png", "15p.png", "16.png", "166515_314350715315510_
     <strong>DECAY EM:</strong> <span id="decay-timer">--</span>s
     <div id="prob-list" style="margin-top:12px;"></div>
     <hr style="border-color:var(--border); margin:8px 0">
-    <div style="font-size:9px; opacity:0.35; letter-spacing:0.1em; margin-bottom:6px;">COOLDOWN (últimos mostrados)</div>
+    <div style="font-size:9px; opacity:0.35; letter-spacing:0.1em; margin-bottom:6px;">FILA DE RECENCIA (mais recente primeiro)</div>
     <div id="cooldown-list"></div>
     <button class="btn-monitor" onclick="openColorModal()">🎨 Editar cores do shader</button>
 </div>
@@ -632,7 +661,6 @@ const LIVE = {
     get decay(){ return parseInt(document.getElementById('cfg-decay').value) },
     get speed(){ return parseFloat(document.getElementById('cfg-speed').value) },
     get share(){ return parseInt(document.getElementById('cfg-share').value) },
-    get cooldownSize(){ return parseInt(document.getElementById('cfg-cooldown').value) }
 };
 
 const templates = {
@@ -655,6 +683,15 @@ const templates = {
             <button class="cta-action" onclick="injectIntent('desenhos')">
                 <span>Focar</span><span class="arr">→</span>
             </button>
+            <div class="session-progress-wrap" data-sp-group="desenhos">
+                <div class="session-progress-label">
+                    <span>Progresso da sessão</span>
+                    <span class="session-progress-count">0 / 0</span>
+                </div>
+                <div class="session-progress-track">
+                    <div class="session-progress-fill" style="width:0%"></div>
+                </div>
+            </div>
         </div></div>`,
 
         "GO_PROJETOS": `<div class="instancia-container cta-inst"><div class="cta-display">
@@ -664,6 +701,15 @@ const templates = {
             <button class="cta-action" onclick="injectIntent('projetos')">
                 <span>Focar</span><span class="arr">→</span>
             </button>
+            <div class="session-progress-wrap" data-sp-group="projetos">
+                <div class="session-progress-label">
+                    <span>Progresso da sessão</span>
+                    <span class="session-progress-count">0 / 0</span>
+                </div>
+                <div class="session-progress-track">
+                    <div class="session-progress-fill" style="width:0%"></div>
+                </div>
+            </div>
         </div></div>`
     },
     desenhos: {},
@@ -708,10 +754,34 @@ function loadDesenhos() {
 }
 
 // =============================================
+// FILA DE RECENCIA GLOBAL (lista circular)
+// =============================================
+// Array do mais antigo (indice 0) ao mais recente (fim).
+// Qualquer item commitado — com ou sem foco — entra aqui.
+// Fator de probabilidade = posicao_na_fila / tamanho_total
+//   fim da fila = recem-visto = fator proximo de 0
+//   inicio da fila / nao-visto = fator 1.0
+const recencyQueue = [];
+
+function getCooldownFactor(key) {
+    const idx = recencyQueue.indexOf(key);
+    if (idx === -1) return 1.0; // nunca visto
+    const n = recencyQueue.length;
+    // idx=0 eh o mais antigo, idx=n-1 o mais recente
+    // fator vai de ~0 (mais recente) a (n-1)/(n+1) (mais antigo)
+    // nunca chega a 0 nem a 1 exato — evita travar
+    return idx / (n + 1);
+}
+
+function markSeen(key) {
+    const i = recencyQueue.indexOf(key);
+    if (i !== -1) recencyQueue.splice(i, 1);
+    recencyQueue.push(key);
+}
+
+// =============================================
 // ESTADO
 // =============================================
-let recentHistory = [];
-
 let state={
     targetWeights:{}, currentWeights:{},
     focusGroup:'ctas', lastDecayTime:Date.now(),
@@ -755,7 +825,10 @@ function updatePill(group, decayRemaining) {
     dot.style.background = color;
     text.textContent = label;
 
-    if (group !== 'ctas' && decayRemaining > 0) {
+    const isActive = group !== 'ctas';
+    pill.classList.toggle('active-focus', isActive);
+
+    if (isActive && decayRemaining > 0) {
         timer.textContent = `· ${Math.ceil(decayRemaining)}s`;
     } else {
         timer.textContent = '';
@@ -781,11 +854,9 @@ function hidePill(delay = 3000) {
 function onFocusChanged(group) {
     updatePill(group, 0);
     showPill();
-    // pra modo livre some depois de 3s; pra foco ativo some quando acabar o decay
     if (group === 'ctas') {
         hidePill(2500);
     }
-    // se foco ativo, a pílula fica visível enquanto tiver decay — gerenciado no setInterval abaixo
 }
 
 // =============================================
@@ -813,66 +884,137 @@ setInterval(()=>{
     updateMonitor();
 },50);
 
-function pushHistory(item) {
-    recentHistory = recentHistory.filter(k => k !== item);
-    recentHistory.unshift(item);
-    const n = LIVE.cooldownSize;
-    if (recentHistory.length > n) recentHistory = recentHistory.slice(0, n);
-}
-
+/**
+ * Sorteia o próximo item usando probabilidade base × fator de cooldown.
+ * O fator sobe de 0→1 ao longo do tempo de cooldown configurado.
+ * Isso garante que um item visto agora pouco nunca apareça de cara dnv.
+ */
 function runEngine(){
     if(state.isLocked) return;
 
-    let pool = Object.keys(state.currentWeights).filter(k => !recentHistory.includes(k));
-    if(state.focusGroup==='desenhos') pool=pool.filter(k=>k!=='GO_DESENHOS');
-    if(state.focusGroup==='projetos') pool=pool.filter(k=>k!=='GO_PROJETOS');
+    const allKeys = Object.keys(state.currentWeights);
 
-    if (pool.length === 0) {
-        pool = Object.keys(state.currentWeights).filter(k => k !== state.currentCandidate);
-        if(state.focusGroup==='desenhos') pool=pool.filter(k=>k!=='GO_DESENHOS');
-        if(state.focusGroup==='projetos') pool=pool.filter(k=>k!=='GO_PROJETOS');
+    // monta pool com probabilidade efetiva = peso × cooldownFactor
+    let pool = allKeys.filter(k => {
+        if (state.focusGroup==='desenhos' && k==='GO_DESENHOS') return false;
+        if (state.focusGroup==='projetos' && k==='GO_PROJETOS') return false;
+        return true;
+    });
+
+    // calcula pesos efetivos
+    const effectiveWeights = pool.map(k => {
+        const base = Math.max(0, state.currentWeights[k]);
+        const factor = getCooldownFactor(k);
+        return base * factor;
+    });
+
+    const total = effectiveWeights.reduce((a,v) => a+v, 0);
+
+    // se tudo zerado (pool muito restrito), ignora cooldown pra não travar
+    let sel;
+    if (total <= 0) {
+        // fallback: ignora cooldown e escolhe pelo peso bruto
+        const rawTotal = pool.reduce((a,k) => a + Math.max(0, state.currentWeights[k]), 0);
+        if (rawTotal <= 0) return;
+        let rand = Math.random() * rawTotal;
+        sel = pool[0];
+        for (let i = 0; i < pool.length; i++) {
+            const w = Math.max(0, state.currentWeights[pool[i]]);
+            if (rand < w) { sel = pool[i]; break; }
+            rand -= w;
+        }
+    } else {
+        let rand = Math.random() * total;
+        sel = pool[0];
+        for (let i = 0; i < pool.length; i++) {
+            if (rand < effectiveWeights[i]) { sel = pool[i]; break; }
+            rand -= effectiveWeights[i];
+        }
     }
 
-    const total=pool.reduce((a,k)=>a+state.currentWeights[k],0);
-    if(total<=0) return;
+    state.currentCandidate = sel;
+    document.getElementById('next-label').innerText = sel;
 
-    let rand=Math.random()*total, sel=pool[0];
-    for(const key of pool){ if(rand<state.currentWeights[key]){sel=key;break;} rand-=state.currentWeights[key]; }
-
-    state.currentCandidate=sel;
-    document.getElementById('next-label').innerText=sel;
-
-    const area=document.getElementById('candidate-area');
-    area.dataset.currentKey=sel;
+    const area = document.getElementById('candidate-area');
+    area.dataset.currentKey = sel;
     for(const g in templates){
         if(templates[g][sel]){ area.innerHTML=templates[g][sel]; break; }
     }
-    setTimeout(detectCenter, 50);
+    setTimeout(() => { detectCenter(); updateSessionProgress(); }, 50);
 }
 
+/**
+ * injectIntent — limpa toda a timeline, aplica foco viciado e mostra
+ * 1 item do grupo escolhido (dado completamente viciado).
+ */
 function injectIntent(group){
+    // 1. Encontra o CTA que foi clicado (último item da timeline ou o hero)
+    //    e remove tudo abaixo dele — sem mover o scroll
+    const timeline = document.getElementById('timeline');
+    const area     = document.getElementById('candidate-area');
+
+    // Acha qual elemento do DOM está na viewport agora (o CTA clicado)
+    // Estratégia: remove da timeline os filhos que estejam ABAIXO do scroll atual
+    // e limpa o candidate-area
+    const scrollY = window.scrollY;
+    const viewportMid = scrollY + window.innerHeight / 2;
+
+    // Remove itens da timeline que estão totalmente abaixo do viewport
+    const children = Array.from(timeline.children);
+    let cutIdx = children.length; // começa assumindo remove nenhum
+    for (let i = 0; i < children.length; i++) {
+        const rect = children[i].getBoundingClientRect();
+        const absTop = rect.top + scrollY;
+        // se o topo do item está abaixo do meio da tela, corta a partir daqui
+        if (absTop > viewportMid) { cutIdx = i; break; }
+    }
+    // Remove do cutIdx em diante
+    for (let i = children.length - 1; i >= cutIdx; i--) {
+        timeline.removeChild(children[i]);
+    }
+    // Limpa candidate
+    area.innerHTML = ''; area.dataset.currentKey = '';
+
+    // 2. Reseta sessão do grupo
+    if (sessionSeen[group]) sessionSeen[group] = new Set();
+
+    // 3. Aplica foco
     calculateTargets(group);
-    const items=Object.keys(templates[group]);
-    const share=LIVE.share/items.length;
-    items.forEach(item=>{ state.currentWeights[item]=share; });
-    Object.keys(state.currentWeights).forEach(k=>{ if(!items.includes(k)) state.currentWeights[k]=0; });
+    const items = Object.keys(templates[group]);
+    const share = LIVE.share / items.length;
+    items.forEach(item => { state.currentWeights[item] = share; });
+    Object.keys(state.currentWeights).forEach(k => { if(!items.includes(k)) state.currentWeights[k] = 0; });
+
+    // 4. Dado viciado: prefere itens nao na fila de recencia (nunca vistos)
+    const available = items.filter(k => !recencyQueue.includes(k));
+    const pick = available.length > 0
+        ? available[Math.floor(Math.random() * available.length)]
+        : items.reduce((best, k) => getCooldownFactor(k) > getCooldownFactor(best) ? k : best, items[0]);
+
+    state.currentCandidate = pick;
     state.last = null;
-    recentHistory = [];
-    const firstItem = items[Math.floor(Math.random()*items.length)];
-    state.currentCandidate = firstItem;
-    document.getElementById('next-label').innerText = firstItem;
-    const area = document.getElementById('candidate-area');
-    area.dataset.currentKey = firstItem;
-    area.innerHTML = templates[group][firstItem];
-    setTimeout(detectCenter, 50);
-    window.scrollBy({top:150,behavior:'smooth'});
+
+    area.dataset.currentKey = pick;
+    area.innerHTML = templates[group][pick];
+    document.getElementById('next-label').innerText = pick;
+    setTimeout(() => { detectCenter(); updateSessionProgress(); }, 50);
+    // SEM scrollBy — mantém posição do scroll
 }
 
 function commit(){
     state.isLocked=true;
     const item=state.currentCandidate;
     state.last=item;
-    pushHistory(item);
+
+    // registra o timestamp de quando foi visto
+    markSeen(item);
+
+    // detecta grupo pelo prefixo e registra na sessao (independente do foco)
+    const itemGroup = item.startsWith('D3.') ? 'desenhos'
+                    : item.startsWith('P4.') ? 'projetos'
+                    : 'ctas';
+    if (sessionSeen[itemGroup]) sessionSeen[itemGroup].add(item);
+
     state.currentWeights[item]=0;
     const area=document.getElementById('candidate-area');
     const div=document.createElement('div');
@@ -880,7 +1022,7 @@ function commit(){
     div.innerHTML=area.innerHTML;
     document.getElementById('timeline').appendChild(div);
     requestAnimationFrame(()=>{
-        requestAnimationFrame(()=>{ div.classList.add('commited'); });
+        requestAnimationFrame(()=>{ div.classList.add('commited'); updateSessionProgress(); });
     });
     area.innerHTML=''; area.dataset.currentKey='';
     state.isLocked=false;
@@ -891,13 +1033,10 @@ setInterval(()=>{
     if(state.focusGroup!=='ctas'){
         const rem=Math.max(0,(LIVE.decay-(Date.now()-state.lastDecayTime))/1000);
         document.getElementById('decay-timer').innerText=rem.toFixed(1);
-
-        // atualiza o timer na pílula e mantém visível
         updatePill(state.focusGroup, rem);
         if (rem > 0) {
             showPill();
         } else {
-            // decay expirou → volta pro modo livre
             calculateTargets('ctas');
         }
     } else {
@@ -914,28 +1053,42 @@ window.addEventListener('scroll',()=>{
 function updateMonitor(){
     document.getElementById('current-focus').innerText=state.focusGroup.toUpperCase();
 
-    document.getElementById('prob-list').innerHTML=Object.entries(state.currentWeights)
-        .sort((a,b)=>b[1]-a[1]).slice(0,6)
-        .map(([k,v])=>{
-            const onCooldown = recentHistory.includes(k);
-            const label = onCooldown ? `${k} <span style="opacity:0.4;color:#f87">[cd:${recentHistory.indexOf(k)+1}]</span>` : k;
-            return `
-            <div style="margin-bottom:7px">
-                <div style="display:flex;justify-content:space-between;opacity:${onCooldown?0.3:0.8}"><span>${label}</span><span>${v.toFixed(1)}%</span></div>
-                <div style="width:100%;height:2px;background:rgba(255,255,255,0.08);border-radius:2px;margin-top:3px">
-                    <div class="bar-fill" style="width:${Math.min(v*2,100)}%;opacity:${onCooldown?0.25:1}"></div>
-                </div>
-            </div>`;
-        }).join('');
+    // mostra pesos efetivos (base × cooldown)
+    const entries = Object.entries(state.currentWeights)
+        .map(([k, v]) => {
+            const factor = getCooldownFactor(k);
+            const eff = Math.max(0, v) * factor;
+            return [k, v, factor, eff];
+        })
+        .sort((a, b) => b[3] - a[3])
+        .slice(0, 6);
 
-    const n = LIVE.cooldownSize;
-    document.getElementById('cooldown-list').innerHTML = recentHistory.length === 0
+    document.getElementById('prob-list').innerHTML = entries.map(([k, base, factor, eff]) => {
+        const inQueue = recencyQueue.includes(k);
+        const cdPct = Math.round(factor * 100);
+        const label = inQueue
+            ? `${k} <span style="opacity:0.4;color:#f87">[${cdPct}%]</span>`
+            : k;
+        return `
+        <div style="margin-bottom:7px">
+            <div style="display:flex;justify-content:space-between;opacity:${inQueue?0.45:0.8}"><span>${label}</span><span>${eff.toFixed(1)}%</span></div>
+            <div style="width:100%;height:2px;background:rgba(255,255,255,0.08);border-radius:2px;margin-top:3px">
+                <div class="bar-fill" style="width:${Math.min(eff*2,100)}%;opacity:${inQueue?0.35:1}"></div>
+            </div>
+        </div>`;
+    }).join('');
+
+    // recency list — mostra a fila do mais recente pro mais antigo
+    const n = recencyQueue.length;
+    document.getElementById('cooldown-list').innerHTML = n === 0
         ? '<div style="font-size:9px;opacity:0.25;">vazio</div>'
-        : recentHistory.map((k, i) => {
-            const ratio = (n - i) / n;
+        : recencyQueue.slice().reverse().slice(0, 8).map((k, i) => {
+            const factor = getCooldownFactor(k);
+            const pct = Math.round(factor * 100);
             return `<div class="cooldown-item">
                 <span>[${i+1}] ${k}</span>
-                <div class="cd-bar"><div class="cd-fill" style="width:${ratio*100}%"></div></div>
+                <div class="cd-bar"><div class="cd-fill" style="width:${(1-factor)*100}%"></div></div>
+                <span class="cd-time">${pct}%</span>
             </div>`;
         }).join('');
 }
@@ -943,6 +1096,38 @@ function updateMonitor(){
 loadDesenhos();
 init();
 setInterval(runEngine, 400);
+
+// =============================================
+// PILL STOP BUTTON
+// =============================================
+document.getElementById('pill-stop').addEventListener('click', () => {
+    calculateTargets('ctas');
+});
+
+// =============================================
+// SESSION PROGRESS — conta itens commitados por grupo
+// usando a recencyQueue como fonte de verdade
+// =============================================
+const sessionSeen = { desenhos: new Set(), projetos: new Set(), ctas: new Set() };
+
+function updateSessionProgress() {
+    ['desenhos', 'projetos'].forEach(group => {
+        const total = Object.keys(templates[group]).length;
+        const seen  = sessionSeen[group] ? sessionSeen[group].size : 0;
+        const pct   = total > 0 ? Math.min(seen / total, 1) : 0;
+        const color = FOCUS_COLORS[group] || '#fff';
+
+        // seleciona por data-attribute — funciona em qualquer instância no DOM
+        document.querySelectorAll(`[data-sp-group="${group}"]`).forEach(spEl => {
+            const fill  = spEl.querySelector('.session-progress-fill');
+            const count = spEl.querySelector('.session-progress-count');
+            if (fill)  { fill.style.width = `${pct * 100}%`; fill.style.background = color; }
+            if (count) count.textContent = `${seen} / ${total}`;
+        });
+    });
+}
+
+setInterval(updateSessionProgress, 500);
 
 // =============================================
 // MONITOR TOGGLE
