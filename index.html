@@ -404,21 +404,26 @@ window.DESENHOS_INDEX = ["13.png", "15p.png", "16.png", "166515_314350715315510_
 
 <!-- MONITOR -->
 <div id="log-monitor">
-    <strong style="opacity:0.5; font-size:10px; letter-spacing:0.1em">GGUI CONTROL PANEL v7.6</strong>
+    <strong style="opacity:0.5; font-size:10px; letter-spacing:0.1em">GGUI CONTROL PANEL v9.1</strong>
     <hr style="border-color:var(--border); margin:8px 0">
-    <div class="config-row"><span>Decay (ms):</span>    <input type="number" id="cfg-decay" value="12000"></div>
-    <div class="config-row"><span>Linear Speed:</span>  <input type="number" id="cfg-speed" step="0.1" value="0.1"></div>
-    <div class="config-row"><span>Focus Share %:</span> <input type="number" id="cfg-share" value="86"></div>
+    <div class="config-row"><span>Decay (ms):</span>    <input type="number" id="cfg-decay" value="60000"></div>
+    <div class="config-row"><span>Linear Speed:</span>  <input type="number" id="cfg-speed" step="0.1" value="0.2"></div>
+    <div class="config-row"><span>Focus Share %:</span> <input type="number" id="cfg-share" value="80"></div>
+    <div class="config-row"><span>Drift (s):</span>     <input type="number" id="cfg-drift" value="90"></div>
+    <div class="config-row"><span>Idle Reset (s):</span><input type="number" id="cfg-idle-reset" value="45"></div>
     <hr style="border-color:var(--border); margin:8px 0">
     <div style="font-size:9px;opacity:0.35;letter-spacing:0.1em;margin-bottom:6px;">SHADER / CANVAS</div>
     <div class="config-row"><span>V Overshoot:</span>   <input type="number" id="cfg-overshoot" step="0.05" value="1.0"></div>
     <hr style="border-color:var(--border); margin:8px 0">
     <strong>EM FOCO:</strong> <span id="current-focus">HERO</span><br>
+    <strong>SHARE:</strong> <span id="share-live">--</span>% → <span id="drift-progress">0</span>%<br>
     <strong>PRÓXIMO:</strong> <span id="next-label">--</span><br>
-    <strong>DECAY EM:</strong> <span id="decay-timer">--</span>s
+    <strong>DECAY EM:</strong> <span id="decay-timer">--</span>s<br>
+    <strong>CICLO:</strong> <span id="cycle-counter">0/0</span><br>
+    <strong>IDLE:</strong> <span id="idle-timer">0</span>s
     <div id="prob-list" style="margin-top:12px;"></div>
     <hr style="border-color:var(--border); margin:8px 0">
-    <div style="font-size:9px; opacity:0.35; letter-spacing:0.1em; margin-bottom:6px;">FILA DE RECENCIA (mais recente primeiro)</div>
+    <div style="font-size:9px; opacity:0.35; letter-spacing:0.1em; margin-bottom:6px;">CICLO ATUAL (já vistos)</div>
     <div id="cooldown-list"></div>
     <button class="btn-monitor" onclick="openColorModal()">🎨 Editar cores do shader</button>
 </div>
@@ -661,6 +666,8 @@ const LIVE = {
     get decay(){ return parseInt(document.getElementById('cfg-decay').value) },
     get speed(){ return parseFloat(document.getElementById('cfg-speed').value) },
     get share(){ return parseInt(document.getElementById('cfg-share').value) },
+    get drift(){ return parseFloat(document.getElementById('cfg-drift').value) * 1000 },
+    get idleReset(){ return parseInt(document.getElementById('cfg-idle-reset').value) * 1000 },
 };
 
 const templates = {
@@ -781,12 +788,32 @@ function markSeen(key) {
 }
 
 // =============================================
+// CICLO SEM REPETIÇÃO + IDLE RESET
+// =============================================
+// Cada item aparece uma vez antes de qualquer repetição.
+// Após IDLE_RESET_MS sem scroll, o ciclo é perdoado e
+// todos os itens voltam a ter peso igual dentro dos grupos.
+// cycleSets: por grupo — cada grupo reseta seu ciclo independentemente.
+// Isso garante que CTAs (3 itens) nunca bloqueiem desenhos (90+ itens).
+const cycleSets = { ctas: new Set(), desenhos: new Set(), projetos: new Set() };
+
+function groupOf(key) {
+    if (key.startsWith('D3.')) return 'desenhos';
+    if (key.startsWith('P4.')) return 'projetos';
+    return 'ctas';
+}
+
+let lastActivityTime = Date.now();
+
+// =============================================
 // ESTADO
 // =============================================
 let state={
     targetWeights:{}, currentWeights:{},
     focusGroup:'ctas', lastDecayTime:Date.now(),
-    last:null, isLocked:false, currentCandidate:null
+    focusStartTime:Date.now(),
+    last:null, isLocked:false, currentCandidate:null,
+    _currentFocusShare:86, _driftPct:0
 };
 
 function init(){
@@ -862,24 +889,40 @@ function onFocusChanged(group) {
 
 // =============================================
 
-function calculateTargets(focus, fromDecay){
-    const prev = state.focusGroup;
-    state.focusGroup = focus;
-    state.lastDecayTime = Date.now();
-
+/**
+ * Computa os targetWeights no instante atual com base no drift temporal.
+ * Chamado a cada tick do setInterval — os pesos alvo mudam continuamente.
+ */
+function computeTargetWeights() {
+    const elapsed = Date.now() - state.focusStartTime;
+    const t = Math.min(elapsed / LIVE.drift, 1.0);
+    // ease-in: t² — zona dourada longa no pico, erosão acelerada no final
+    const eased = t * t;
     const groups = Object.keys(templates);
     const numGroups = groups.length;
+    const neutralShare = 100 / numGroups;
+    const focusShare = LIVE.share + (neutralShare - LIVE.share) * eased;
+    state._currentFocusShare = focusShare; // para o monitor
+    state._driftPct = Math.round(eased * 100);
 
     groups.forEach(g => {
-        const isFocused = g === focus;
-        const share = isFocused ? LIVE.share : (100 - LIVE.share) / (numGroups - 1);
+        const isFocused = g === state.focusGroup;
+        const share = isFocused ? focusShare : (100 - focusShare) / (numGroups - 1);
         const items = Object.keys(templates[g]);
         items.forEach(item => {
             state.targetWeights[item] = share / items.length;
         });
     });
+}
 
-    // injeta pesos imediatamente sem esperar o lerp
+function calculateTargets(focus){
+    const prev = state.focusGroup;
+    state.focusGroup = focus;
+    state.focusStartTime = Date.now();
+    state.lastDecayTime = Date.now();
+
+    // injeta pesos do instante zero imediatamente (t=0 → share=peak)
+    computeTargetWeights();
     Object.keys(state.targetWeights).forEach(k => {
         state.currentWeights[k] = state.targetWeights[k];
     });
@@ -891,17 +934,18 @@ function calculateTargets(focus, fromDecay){
 }
 
 setInterval(()=>{
+    computeTargetWeights(); // drift contínuo — alvos se movem a cada tick
     Object.keys(state.currentWeights).forEach(key=>{
         const d=state.targetWeights[key]-state.currentWeights[key];
-        if(Math.abs(d)>0.01) state.currentWeights[key]+=Math.sign(d)*Math.min(Math.abs(d),LIVE.speed);
+        if(Math.abs(d)>0.005) state.currentWeights[key]+=Math.sign(d)*Math.min(Math.abs(d),LIVE.speed);
     });
     updateMonitor();
 },50);
 
 /**
- * Sorteia o próximo item usando probabilidade base × fator de cooldown.
- * O fator sobe de 0→1 ao longo do tempo de cooldown configurado.
- * Isso garante que um item visto agora pouco nunca apareça de cara dnv.
+ * Sorteia o próximo item usando fila de ciclo (sem repetição):
+ * cada item aparece uma vez antes de qualquer repetição.
+ * Após IDLE_RESET_MS de inatividade o ciclo é perdoado.
  */
 function runEngine(force){
     if(state.isLocked) return;
@@ -913,44 +957,47 @@ function runEngine(force){
 
     const allKeys = Object.keys(state.currentWeights);
 
-    // monta pool com probabilidade efetiva = peso × cooldownFactor
-    // exclui o candidato atual — nunca sorteia o mesmo 2x seguidas
-    let pool = allKeys.filter(k => {
-        if (k === state.currentCandidate) return false;
-        if (state.focusGroup==='desenhos' && k==='GO_DESENHOS') return false;
-        if (state.focusGroup==='projetos' && k==='GO_PROJETOS') return false;
-        return true;
+    // Antes de filtrar: reseta o ciclo de cada grupo que estiver esgotado.
+    // Isso garante que grupos pequenos (ex: 3 CTAs) nunca fiquem presos
+    // esperando grupos grandes (ex: 90 desenhos) terminarem.
+    Object.keys(cycleSets).forEach(g => {
+        const groupItems = Object.keys(templates[g] || {});
+        if (groupItems.length > 0 && groupItems.every(k => cycleSets[g].has(k))) {
+            cycleSets[g].clear();
+        }
     });
 
-    // calcula pesos efetivos
-    const effectiveWeights = pool.map(k => {
-        const base = Math.max(0, state.currentWeights[k]);
-        const factor = getCooldownFactor(k);
-        return base * factor;
-    });
+    function buildPool() {
+        return allKeys.filter(k => {
+            if (k === state.currentCandidate) return false;
+            if (cycleSets[groupOf(k)]?.has(k)) return false;
+            if (state.focusGroup==='desenhos' && k==='GO_DESENHOS') return false;
+            if (state.focusGroup==='projetos' && k==='GO_PROJETOS') return false;
+            return true;
+        });
+    }
 
+    let pool = buildPool();
+
+    // segurança: se ainda assim estiver vazio (candidato atual bloqueando o único item)
+    // limpa todos os ciclos e tenta de novo
+    if (pool.length === 0) {
+        Object.keys(cycleSets).forEach(g => cycleSets[g].clear());
+        pool = buildPool();
+        if (pool.length === 0) return;
+    }
+
+    // pesos base apenas — calculateTargets já distribui igual dentro de cada grupo
+    const effectiveWeights = pool.map(k => Math.max(0, state.currentWeights[k]));
     const total = effectiveWeights.reduce((a,v) => a+v, 0);
 
-    // se tudo zerado (pool muito restrito), ignora cooldown pra não travar
-    let sel;
-    if (total <= 0) {
-        // fallback: ignora cooldown e escolhe pelo peso bruto
-        const rawTotal = pool.reduce((a,k) => a + Math.max(0, state.currentWeights[k]), 0);
-        if (rawTotal <= 0) return;
-        let rand = Math.random() * rawTotal;
-        sel = pool[0];
-        for (let i = 0; i < pool.length; i++) {
-            const w = Math.max(0, state.currentWeights[pool[i]]);
-            if (rand < w) { sel = pool[i]; break; }
-            rand -= w;
-        }
-    } else {
-        let rand = Math.random() * total;
-        sel = pool[0];
-        for (let i = 0; i < pool.length; i++) {
-            if (rand < effectiveWeights[i]) { sel = pool[i]; break; }
-            rand -= effectiveWeights[i];
-        }
+    if (total <= 0) return;
+
+    let sel = pool[0];
+    let rand = Math.random() * total;
+    for (let i = 0; i < pool.length; i++) {
+        if (rand < effectiveWeights[i]) { sel = pool[i]; break; }
+        rand -= effectiveWeights[i];
     }
 
     state.currentCandidate = sel;
@@ -1003,11 +1050,14 @@ function injectIntent(group){
     calculateTargets(group);
     state.isLocked = false;
 
-    // 4. Dado viciado: prefere itens nao na fila de recencia (nunca vistos)
-    const available = items.filter(k => !recencyQueue.includes(k));
+    // 4. Dado viciado: reseta o ciclo do grupo escolhido e prefere itens
+    //    ainda não vistos neste grupo
+    const items = Object.keys(templates[group]);
+    cycleSets[group].clear(); // ciclo fresco pro grupo focado
+    const available = items.filter(k => !cycleSets[group].has(k));
     const pick = available.length > 0
         ? available[Math.floor(Math.random() * available.length)]
-        : items.reduce((best, k) => getCooldownFactor(k) > getCooldownFactor(best) ? k : best, items[0]);
+        : items[Math.floor(Math.random() * items.length)];
 
     state.currentCandidate = pick;
     state.last = null;
@@ -1024,13 +1074,11 @@ function commit(){
     const item=state.currentCandidate;
     state.last=item;
 
-    // registra o timestamp de quando foi visto
+    // registra no ciclo do grupo correspondente
+    const itemGroup = groupOf(item);
+    cycleSets[itemGroup].add(item);
+    lastActivityTime = Date.now();
     markSeen(item);
-
-    // detecta grupo pelo prefixo e registra na sessao (independente do foco)
-    const itemGroup = item.startsWith('D3.') ? 'desenhos'
-                    : item.startsWith('P4.') ? 'projetos'
-                    : 'ctas';
     if (sessionSeen[itemGroup]) sessionSeen[itemGroup].add(item);
 
     // nao zera currentWeights — a recencyQueue ja penaliza com fator ~0
@@ -1064,52 +1112,74 @@ setInterval(()=>{
 },100);
 
 window.addEventListener('scroll',()=>{
+    lastActivityTime = Date.now();
     const area=document.getElementById('candidate-area');
     if(!area.children.length||state.isLocked) return;
     if(area.getBoundingClientRect().top<window.innerHeight-150) commit();
 });
 
+// =============================================
+// IDLE RESET DO CICLO
+// =============================================
+setInterval(() => {
+    const hasSeen = Object.values(cycleSets).some(s => s.size > 0);
+    if (Date.now() - lastActivityTime >= LIVE.idleReset && hasSeen) {
+        Object.keys(cycleSets).forEach(g => cycleSets[g].clear());
+        lastActivityTime = Date.now(); // evita re-trigger imediato
+        runEngine();
+    }
+}, 1000);
+
 function updateMonitor(){
     document.getElementById('current-focus').innerText=state.focusGroup.toUpperCase();
 
-    // mostra pesos efetivos (base × cooldown)
+    // share live e progresso do drift
+    const shareLive = (state._currentFocusShare || LIVE.share).toFixed(1);
+    const neutralShare = (100 / Object.keys(templates).length).toFixed(1);
+    document.getElementById('share-live').innerText = shareLive;
+    document.getElementById('drift-progress').innerText = neutralShare;
+
+    // ciclo: por grupo
+    const cycleInfo = Object.keys(cycleSets).map(g => {
+        const total = Object.keys(templates[g] || {}).length;
+        return `${g[0].toUpperCase()}:${cycleSets[g].size}/${total}`;
+    }).join(' ');
+    document.getElementById('cycle-counter').innerText = cycleInfo;
+
+    // idle timer
+    const idleSec = ((Date.now() - lastActivityTime) / 1000).toFixed(1);
+    document.getElementById('idle-timer').innerText = idleSec;
+
+    // mostra pesos base, unseen primeiro, marcando vistos com ✓
     const entries = Object.entries(state.currentWeights)
-        .map(([k, v]) => {
-            const factor = getCooldownFactor(k);
-            const eff = Math.max(0, v) * factor;
-            return [k, v, factor, eff];
-        })
-        .sort((a, b) => b[3] - a[3])
+        .map(([k, v]) => [k, Math.max(0, v), cycleSets[groupOf(k)]?.has(k) || false])
+        .sort((a, b) => (a[2] - b[2]) || (b[1] - a[1]))
         .slice(0, 6);
 
-    document.getElementById('prob-list').innerHTML = entries.map(([k, base, factor, eff]) => {
-        const inQueue = recencyQueue.includes(k);
-        const cdPct = Math.round(factor * 100);
-        const label = inQueue
-            ? `${k} <span style="opacity:0.4;color:#f87">[${cdPct}%]</span>`
+    document.getElementById('prob-list').innerHTML = entries.map(([k, base, seen]) => {
+        const label = seen
+            ? `${k} <span style="opacity:0.4;color:#f87">[✓]</span>`
             : k;
         return `
         <div style="margin-bottom:7px">
-            <div style="display:flex;justify-content:space-between;opacity:${inQueue?0.45:0.8}"><span>${label}</span><span>${eff.toFixed(1)}%</span></div>
+            <div style="display:flex;justify-content:space-between;opacity:${seen?0.35:0.8}"><span>${label}</span><span>${base.toFixed(1)}%</span></div>
             <div style="width:100%;height:2px;background:rgba(255,255,255,0.08);border-radius:2px;margin-top:3px">
-                <div class="bar-fill" style="width:${Math.min(eff*2,100)}%;opacity:${inQueue?0.35:1}"></div>
+                <div class="bar-fill" style="width:${Math.min(base*2,100)}%;opacity:${seen?0.2:1}"></div>
             </div>
         </div>`;
     }).join('');
 
-    // recency list — mostra a fila do mais recente pro mais antigo
-    const n = recencyQueue.length;
-    document.getElementById('cooldown-list').innerHTML = n === 0
-        ? '<div style="font-size:9px;opacity:0.25;">vazio</div>'
-        : recencyQueue.slice().reverse().slice(0, 8).map((k, i) => {
-            const factor = getCooldownFactor(k);
-            const pct = Math.round(factor * 100);
-            return `<div class="cooldown-item">
-                <span>[${i+1}] ${k}</span>
-                <div class="cd-bar"><div class="cd-fill" style="width:${(1-factor)*100}%"></div></div>
-                <span class="cd-time">${pct}%</span>
-            </div>`;
-        }).join('');
+    // ciclo atual — itens commitados por grupo (mais recente primeiro)
+    const allSeen = Object.entries(cycleSets)
+        .flatMap(([g, s]) => [...s].map(k => ({k, g})))
+        .reverse().slice(0, 8);
+    document.getElementById('cooldown-list').innerHTML = allSeen.length === 0
+        ? '<div style="font-size:9px;opacity:0.25;">nenhum ainda</div>'
+        : allSeen.map(({k, g}, i) => `<div class="cooldown-item">
+            <span>[${i+1}] ${k}</span>
+            <div class="cd-bar"><div class="cd-fill" style="width:100%"></div></div>
+            <span class="cd-time" style="opacity:0.4">${g[0]}</span>
+        </div>`).join('');
 }
 
 loadDesenhos();
