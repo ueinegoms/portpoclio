@@ -22,14 +22,10 @@
         }
         #bg-canvas-wrap {
             position: fixed;
-            /* Negative safe-area insets bleed behind iOS status bar (top)
-               and the liquid-glass address bar / home indicator (bottom).
-               viewport-fit=cover in the meta tag makes env() non-zero. */
-            top:    calc(0px - env(safe-area-inset-top,    0px));
-            left:   calc(0px - env(safe-area-inset-left,   0px));
-            right:  calc(0px - env(safe-area-inset-right,  0px));
-            bottom: calc(0px - env(safe-area-inset-bottom, 0px));
-            /* no explicit width/height — inset defines the box */
+            top: 0; left: 0; right: 0; bottom: 0;
+            height: 100vh;
+            height: -webkit-fill-available;
+            height: 100dvh;
             z-index: 0;
             pointer-events: none;
         }
