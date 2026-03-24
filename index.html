@@ -6,6 +6,8 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>...wayne...</title>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="projetos/projetos-buttons.css">
     <style>
         :root {
             --text: #f0ede8;
@@ -20,10 +22,14 @@
         }
         #bg-canvas-wrap {
             position: fixed;
-            top: 0; left: 0; right: 0; bottom: 0;
-            height: 100vh;
-            height: -webkit-fill-available;
-            height: 100dvh;
+            /* Negative safe-area insets bleed behind iOS status bar (top)
+               and the liquid-glass address bar / home indicator (bottom).
+               viewport-fit=cover in the meta tag makes env() non-zero. */
+            top:    calc(0px - env(safe-area-inset-top,    0px));
+            left:   calc(0px - env(safe-area-inset-left,   0px));
+            right:  calc(0px - env(safe-area-inset-right,  0px));
+            bottom: calc(0px - env(safe-area-inset-bottom, 0px));
+            /* no explicit width/height — inset defines the box */
             z-index: 0;
             pointer-events: none;
         }
@@ -35,8 +41,8 @@
 
         html, body {
             height: 100%;
-            min-height: -webkit-fill-available;
         }
+        /* scroll-snap-type removed — JS smooth snap controller drives timing */
         #wrapper, #log-monitor, #color-modal-overlay { position: relative; z-index: 1; }
 
         /* MONITOR */
@@ -94,7 +100,7 @@
 
         /* INSTÂNCIAS */
         .instancia-container {
-            min-height: 85vh; display: flex; align-items: center; justify-content: center;
+            min-height: 100dvh; display: flex; align-items: center; justify-content: center;
             padding: 40px; border-bottom: 1px solid var(--border);
             opacity: 0.2; transition: opacity 0.4s;
         }
@@ -174,17 +180,24 @@
         /* PROJETO */
         .proj-card { width: min(80vw, 600px); }
         .proj-media {
-            width: 100%; aspect-ratio: 16 / 9; border-radius: 8px;
+            width: 100%; border-radius: 8px;
             overflow: hidden; position: relative; margin-bottom: 24px;
+        }
+        .proj-media--placeholder {
+            aspect-ratio: 16 / 9;
             background: rgba(255,255,255,0.04);
         }
-        .proj-media::before {
+        .proj-media--placeholder::before {
             content: ''; position: absolute; inset: 0;
             background: repeating-linear-gradient(
                 -45deg,
                 transparent, transparent 22px,
                 rgba(255,255,255,0.02) 22px, rgba(255,255,255,0.02) 23px
             );
+        }
+        .proj-media img {
+            width: 100%; display: block; border-radius: 8px;
+            object-fit: contain;
         }
         .proj-media .media-label {
             position: absolute; inset: 0; display: flex; align-items: center;
@@ -410,6 +423,7 @@ window.DESENHOS_INDEX = ["13.png", "15p.png", "16.png", "166515_314350715315510_
     <div class="config-row"><span>Linear Speed:</span>  <input type="number" id="cfg-speed" step="0.1" value="0.2"></div>
     <div class="config-row"><span>Focus Share %:</span> <input type="number" id="cfg-share" value="80"></div>
     <div class="config-row"><span>Drift (s):</span>     <input type="number" id="cfg-drift" value="90"></div>
+    <div class="config-row"><span>Snap (ms):</span>    <input type="number" id="cfg-snap-dur" value="600"></div>
     <div class="config-row"><span>Idle Reset (s):</span><input type="number" id="cfg-idle-reset" value="45"></div>
     <hr style="border-color:var(--border); margin:8px 0">
     <div style="font-size:9px;opacity:0.35;letter-spacing:0.1em;margin-bottom:6px;">SHADER / CANVAS</div>
@@ -668,6 +682,7 @@ const LIVE = {
     get share(){ return parseInt(document.getElementById('cfg-share').value) },
     get drift(){ return parseFloat(document.getElementById('cfg-drift').value) * 1000 },
     get idleReset(){ return parseInt(document.getElementById('cfg-idle-reset').value) * 1000 },
+    get snapDuration(){ return parseInt(document.getElementById('cfg-snap-dur').value) },
 };
 
 const templates = {
@@ -723,19 +738,30 @@ const templates = {
     projetos: {}
 };
 
-for(let i=1;i<=5;i++){
-    templates.projetos[`P4.${i}`]=`<div class="instancia-container"><div class="proj-card">
-        <div class="proj-media">
-            <div class="media-label">
-                <div class="media-icon">▶</div>
-            </div>
-        </div>
-        <div class="proj-info">
-            <div class="proj-eyebrow">PROJ — 4.${i}</div>
-            <h3>projeto ${i}</h3>
-            <p>Placeholder — descreva aqui a intenção do projeto, o problema que ele resolve e as decisões que tornaram a solução possível.</p>
-        </div>
-    </div></div>`;
+// projetos are loaded from projetos/projetos.json — see loadProjetos()
+function loadProjetos() {
+    return fetch('projetos/projetos.json').then(r => r.json()).then(projetos => {
+        projetos.forEach(p => {
+            const safeId = p.id.replace('.', '_');
+            const hasImage = !!p.image;
+            const mediaContent = hasImage
+                ? `<img src="${p.image}" alt="${p.title}" loading="lazy">`
+                : `<div class="media-label"><div class="media-icon">▶</div></div>`;
+            const mediaClass = hasImage ? 'proj-media' : 'proj-media proj-media--placeholder';
+            const ctaHtml = (p.cta && p.cta.enabled)
+                ? `<a class="proj-cta proj-cta--${safeId}" href="${p.cta.url}">${p.cta.label}</a>`
+                : '';
+            templates.projetos[p.id] = `<div class="instancia-container"><div class="proj-card">
+                <div class="${mediaClass}">${mediaContent}</div>
+                <div class="proj-info">
+                    <div class="proj-eyebrow">${p.eyebrow}</div>
+                    <h3>${p.title}</h3>
+                    <p>${p.description}</p>
+                    ${ctaHtml}
+                </div>
+            </div></div>`;
+        });
+    });
 }
 
 function buildDesenhoTemplate(filename, index) {
@@ -1183,8 +1209,14 @@ function updateMonitor(){
 }
 
 loadDesenhos();
-init();
-setInterval(runEngine, 400);
+loadProjetos().then(() => {
+    init();
+    setInterval(runEngine, 400);
+}).catch(err => {
+    console.warn('[ggui] projetos.json not loaded, using empty projetos:', err);
+    init();
+    setInterval(runEngine, 400);
+});
 
 // =============================================
 // PILL STOP BUTTON

@@ -1,0 +1,21 @@
+/* =============================================
+   PROJETOS — CTA BUTTON STYLES
+   Write your custom button styles here.
+   Each project button gets the class .proj-cta
+   plus a project-specific class .proj-cta--P4_1, .proj-cta--P4_2, etc.
+   ============================================= */
+
+.proj-cta {
+    display: block;
+    width: 100%;
+    padding: 25px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 2.5rem;
+    font-weight: 400;
+    text-align: center;
+    text-decoration: none;
+    text-transform: uppercase;
+    margin-top: 16px;
+    background: #1C3DF7;
+    color: #fff;
+}
