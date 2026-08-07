@@ -19,3 +19,17 @@
     background: #1C3DF7;
     color: #fff;
 }
+
+/* projeto 2 fala sobre o proprio site — o botao aparece ja "pressionado",
+   porque so de estar navegando nele voce ja esta dentro da experiencia */
+.proj-cta--P4_2 {
+    background: #000;
+    color: #fff;
+    text-transform: none;
+    cursor: default;
+    pointer-events: none;
+}
+
+.proj-info p.proj-desc--P4_2 {
+    color: #fff;
+}

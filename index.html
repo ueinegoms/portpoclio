@@ -219,6 +219,35 @@
             font-size: 0.9rem; color: rgba(240,237,232,0.38);
             line-height: 1.65; margin: 0;
         }
+        .proj-links {
+            margin-top: 12px; display: flex; flex-direction: column; gap: 4px;
+        }
+        .proj-links a {
+            font-size: 0.78rem; color: rgba(240,237,232,0.45);
+            word-break: break-all; text-decoration: underline;
+            text-underline-offset: 2px; transition: color 0.2s;
+        }
+        .proj-links a:hover { color: rgba(240,237,232,0.85); }
+        .proj-cta-row { display: flex; gap: 10px; margin-top: 16px; }
+        .proj-cta-row .proj-cta { margin-top: 0; flex: 1; }
+
+        /* rolling-shutter: duas imagens, a de cima varre em degraus (steps)
+           revelando/escondendo a de baixo, num loop — "tosco" de propósito */
+        .proj-media--rs { aspect-ratio: 16 / 9; }
+        .proj-media--rs img {
+            position: absolute; inset: 0; width: 100%; height: 100%;
+            object-fit: cover;
+        }
+        .proj-media--rs .rs-base { z-index: 1; }
+        .proj-media--rs .rs-top {
+            z-index: 2;
+            animation: rs-wipe 3s steps(16, end) infinite;
+        }
+        @keyframes rs-wipe {
+            0%   { clip-path: inset(0 0 100% 0); }
+            50%  { clip-path: inset(0 0 0% 0); }
+            100% { clip-path: inset(0 0 100% 0); }
+        }
 
         /* HERO */
         #sobre-mim .cta-display h2 { font-weight: 900; }
@@ -420,10 +449,17 @@ window.DESENHOS_INDEX = ["13.png", "15p.png", "16.png", "166515_314350715315510_
     <div class="config-row"><span>Focus Share %:</span> <input type="number" id="cfg-share" value="80"></div>
     <div class="config-row"><span>Drift (s):</span>     <input type="number" id="cfg-drift" value="90"></div>
     <div class="config-row"><span>Snap (ms):</span>    <input type="number" id="cfg-snap-dur" value="600"></div>
-    <div class="config-row"><span>Idle Reset (s):</span><input type="number" id="cfg-idle-reset" value="45"></div>
+    <div class="config-row"><span>Idle Reset (s):</span><input type="number" id="cfg-idle-reset" value="180"></div>
     <hr style="border-color:var(--border); margin:8px 0">
     <div style="font-size:9px;opacity:0.35;letter-spacing:0.1em;margin-bottom:6px;">SHADER / CANVAS</div>
     <div class="config-row"><span>V Overshoot:</span>   <input type="number" id="cfg-overshoot" step="0.05" value="1.0"></div>
+    <div style="font-size:9px;opacity:0.35;letter-spacing:0.1em;margin:10px 0 6px;">FRITURA (só projetos)</div>
+    <div class="config-row"><span>Intensidade:</span> <input type="number" id="cfg-fried-amt" step="0.05" value="0.7"></div>
+    <div class="config-row"><span>Frequência:</span>  <input type="number" id="cfg-fried-freq" step="1" value="6"></div>
+    <div class="config-row"><span>Velocidade:</span>   <input type="number" id="cfg-fried-speed" step="0.5" value="5"></div>
+    <div style="font-size:9px;opacity:0.35;letter-spacing:0.1em;margin:10px 0 6px;">DITHER (post-process)</div>
+    <div class="config-row"><span>Resolução:</span>   <input type="number" id="cfg-dither-res" step="10" value="310"></div>
+    <div class="config-row"><span>Intensidade:</span> <input type="number" id="cfg-dither-amt" step="0.01" value="0.045"></div>
     <hr style="border-color:var(--border); margin:8px 0">
     <strong>EM FOCO:</strong> <span id="current-focus">HERO</span><br>
     <strong>SHARE:</strong> <span id="share-live">--</span>% → <span id="drift-progress">0</span>%<br>
@@ -443,7 +479,6 @@ window.DESENHOS_INDEX = ["13.png", "15p.png", "16.png", "166515_314350715315510_
         <div class="cta-display">
             <div class="cta-eyebrow" id="hero-eyebrow">—</div>
             <h2 id="hero-greeting"></h2>
-            <div class="cta-sub">e se a UX fosse procedural?<br>↓↓↓↓↓↓↓↓↓↓↓*infinito<br>experimento de wayne</div>
         </div>
     </section>
     <div id="timeline"></div>
@@ -473,7 +508,7 @@ const DEFAULT_COLORS = {
     'GO_DESENHOS': '#13e75d',
     'GO_PROJETOS': '#374fae',
     'desenhos':    '#257e43',
-    'projetos':    '#293460',
+    'projetos':    '#3633e6',
 };
 
 function loadColors() {
@@ -504,14 +539,16 @@ function getColor(key) {
 // =============================================
 const canvas = document.getElementById('bg-canvas');
 const gl = canvas.getContext('webgl');
+let centerKey = 'ctas'; // grupo em foco no centro da tela — usado pelo envelope de fritura
 
 const vertSrc = `
     attribute vec2 a_pos; attribute vec2 a_uv; varying vec2 v_uv;
     uniform float u_t;
     uniform float u_ar;
     uniform float u_w1a,u_w1f,u_w2a,u_w2f,u_w3a,u_w3f;
+    uniform float u_friedAmt,u_friedFreq,u_friedPhase;
     void main() {
-        v_uv = a_uv; 
+        v_uv = a_uv;
         vec2 p = a_pos * 1.4;
         float targetAR = 16.0 / 9.0;
         float scale = u_ar / targetAR;
@@ -519,6 +556,10 @@ const vertSrc = `
         float w = u_w1a*sin(u_w1f*pn.x+u_t*1.0)
                 + u_w2a*cos(u_w2f*pn.y+u_t*0.7)
                 + u_w3a*sin(u_w3f*(pn.x+pn.y)+u_t*0.5);
+        w += u_friedAmt * (
+            sin(u_friedFreq*pn.x - u_friedPhase) * 0.6
+          + cos(u_friedFreq*pn.y*1.3 + u_friedPhase*1.4) * 0.4
+        );
         p.y+=w; p.x+=w*0.5;
         gl_Position=vec4(p,0.0,1.0);
     }
@@ -537,6 +578,42 @@ const fragSrc = `
         vec3 final=mix(c2,c1,smoothstep(0.1,0.7,val)*0.9);
         final+=vec3(rnd(v_uv*(u_t*0.1+1.0))*0.06);
         gl_FragColor=vec4(final,1.0);
+    }
+`;
+
+// segundo passe: pega o frame já renderizado (mesh + cor) numa textura e
+// desloca os PIXELS de verdade, em blocos pequenos que trocam em degraus —
+// isso é o "post-process" de fato, diferente de deformar a coordenada
+// procedural antes de pintar (que foi a tentativa anterior).
+const postVertSrc = `
+    attribute vec2 a_pos2; varying vec2 v_uv2;
+    void main() {
+        v_uv2 = a_pos2 * 0.5 + 0.5;
+        gl_Position = vec4(a_pos2, 0.0, 1.0);
+    }
+`;
+const postFragSrc = `
+    precision highp float; varying vec2 v_uv2;
+    uniform sampler2D u_scene;
+    uniform float u_ditherRes, u_ditherAmt, u_friedPhase;
+    float rnd(vec2 s){return fract(sin(dot(s,vec2(12.9898,78.233)))*43758.5453);}
+    void main() {
+        vec2 uv = v_uv2;
+        if (u_ditherAmt > 0.0001) {
+            float grid = max(u_ditherRes, 1.0);
+            vec2 cell = floor(uv * grid);
+            float step = floor(u_friedPhase * 14.0); // degraus, não deslize
+            // deslocamentos diferentes em x/y por degrau — somar o mesmo
+            // valor nos dois eixos é uma translação diagonal uniforme (por
+            // isso deslizava pro canto); com eixos diferentes, cada degrau
+            // reembaralha o hash em vez de só arrastar o padrão anterior
+            vec2 seed1 = cell + step * vec2(37.719, 91.331);
+            vec2 seed2 = cell + step * vec2(57.219, 13.117) + 91.7;
+            float n1 = rnd(seed1);
+            float n2 = rnd(seed2);
+            uv += (vec2(n1, n2) - 0.5) * u_ditherAmt;
+        }
+        gl_FragColor = texture2D(u_scene, clamp(uv, 0.0, 1.0));
     }
 `;
 
@@ -572,6 +649,35 @@ const uSC=gl.getUniformLocation(prog,'u_sc');
 const uTC=gl.getUniformLocation(prog,'u_tc');
 const uTP=gl.getUniformLocation(prog,'u_tp');
 const uWs=['u_w1a','u_w1f','u_w2a','u_w2f','u_w3a','u_w3f'].map(n=>gl.getUniformLocation(prog,n));
+const uFriedAmt  =gl.getUniformLocation(prog,'u_friedAmt');
+const uFriedFreq =gl.getUniformLocation(prog,'u_friedFreq');
+const uFriedPhase=gl.getUniformLocation(prog,'u_friedPhase');
+
+// segundo passe (post-process): programa, quad e framebuffer separados
+const postProg=gl.createProgram();
+gl.attachShader(postProg,mkSh(gl.VERTEX_SHADER,postVertSrc));
+gl.attachShader(postProg,mkSh(gl.FRAGMENT_SHADER,postFragSrc));
+gl.linkProgram(postProg);
+
+const quadB=mkBuf(gl.ARRAY_BUFFER,[-1,-1, 1,-1, -1,1, 1,-1, 1,1, -1,1],Float32Array);
+const aPos2=gl.getAttribLocation(postProg,'a_pos2');
+
+const uScene     =gl.getUniformLocation(postProg,'u_scene');
+const uDitherRes =gl.getUniformLocation(postProg,'u_ditherRes');
+const uDitherAmt =gl.getUniformLocation(postProg,'u_ditherAmt');
+const uPostPhase =gl.getUniformLocation(postProg,'u_friedPhase');
+
+const sceneTex=gl.createTexture();
+gl.bindTexture(gl.TEXTURE_2D,sceneTex);
+gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
+gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+
+const sceneFbo=gl.createFramebuffer();
+gl.bindFramebuffer(gl.FRAMEBUFFER,sceneFbo);
+gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,sceneTex,0);
+gl.bindFramebuffer(gl.FRAMEBUFFER,null);
 
 function resize(){
     const r = devicePixelRatio || 1;
@@ -581,6 +687,8 @@ function resize(){
     const overshoot = parseFloat(document.getElementById('cfg-overshoot')?.value || 1.0);
     canvas.width  = Math.round(w * r);
     canvas.height = Math.round(h * r * overshoot);
+    gl.bindTexture(gl.TEXTURE_2D,sceneTex);
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,canvas.width,canvas.height,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
     gl.viewport(0, 0, canvas.width, canvas.height);
 }
 
@@ -599,6 +707,7 @@ let sTgt = hexToRgb(DEFAULT_COLORS.ctas);
 let sTP = 1.0, sTStart = 0;
 const TRANS = 1600;
 let sTime = 0, lastTS = 0;
+let friedEnvelope = 0, friedPhase = 0;
 
 function eio(t) { return 0.5 - 0.5 * Math.cos(Math.PI * t); }
 
@@ -624,22 +733,62 @@ function triggerColor(key) {
         if(sTP>=1.0) sSt=[...sTgt];
     }
     const ep=eio(Math.min(sTP,1.0));
+
+    // envelope de "fritura": sobe/desce suave. Mesma intensidade cheia dentro
+    // de projetos e no CTA "focar em projetos?" (mesmo fundo azulado) — uma
+    // zona só, uma lógica só.
+    const inFriedZone = (typeof groupOf==='function' && groupOf(centerKey)==='projetos') || centerKey==='GO_PROJETOS';
+    const ampTarget = inFriedZone ? 1 : 0;
+    const lerpRate = Math.min(dt * 2.5, 1);
+    friedEnvelope += (ampTarget - friedEnvelope) * lerpRate;
+    const friedAmt   = parseFloat(document.getElementById('cfg-fried-amt')?.value   || 0);
+    const friedFreq  = parseFloat(document.getElementById('cfg-fried-freq')?.value  || 0);
+    const friedSpeed = parseFloat(document.getElementById('cfg-fried-speed')?.value || 0);
+    // fase acumulada em vez de u_t*speed: multiplicar o tempo total (que só
+    // cresce desde o load) por uma velocidade que muda durante a transição
+    // reescreve a fase inteira retroativamente e causa um salto/espasmo —
+    // acumulando so o incremento de cada frame, a mudança de velocidade só
+    // afeta o ritmo dali pra frente.
+    friedPhase += friedSpeed * dt * 0.4;
+
+    // passe 1: mesh + cor, renderizado numa textura em vez do canvas direto
+    gl.bindFramebuffer(gl.FRAMEBUFFER,sceneFbo);
+    gl.useProgram(prog);
+    bindA(pB,'a_pos',2); bindA(uB,'a_uv',2);
     gl.clearColor(0.04,0.04,0.04,1); gl.clear(gl.COLOR_BUFFER_BIT);
     gl.uniform1f(uT,sTime);
     gl.uniform1f(uAR, canvas.width / canvas.height);
     gl.uniform3f(uSC,sSt[0],sSt[1],sSt[2]);
     gl.uniform3f(uTC,sTgt[0],sTgt[1],sTgt[2]);
     gl.uniform1f(uTP,ep);
+    gl.uniform1f(uFriedAmt, friedEnvelope * friedAmt);
+    gl.uniform1f(uFriedFreq, friedFreq);
+    gl.uniform1f(uFriedPhase, friedPhase);
     [0.25,4.0,0.05,13.0,0.02,8.0].forEach((v,i)=>gl.uniform1f(uWs[i],v));
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,iB);
     gl.drawElements(gl.TRIANGLES,vIdx.length,gl.UNSIGNED_SHORT,0);
+
+    // passe 2 (post-process): pega a textura pronta e desloca os pixels
+    gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+    gl.useProgram(postProg);
+    gl.bindBuffer(gl.ARRAY_BUFFER,quadB);
+    gl.enableVertexAttribArray(aPos2);
+    gl.vertexAttribPointer(aPos2,2,gl.FLOAT,false,0,0);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D,sceneTex);
+    gl.uniform1i(uScene,0);
+    const ditherRes = parseFloat(document.getElementById('cfg-dither-res')?.value || 0);
+    const ditherAmt = parseFloat(document.getElementById('cfg-dither-amt')?.value || 0);
+    gl.uniform1f(uDitherRes, ditherRes);
+    gl.uniform1f(uDitherAmt, friedEnvelope * ditherAmt);
+    gl.uniform1f(uPostPhase, friedPhase);
+    gl.clearColor(0.04,0.04,0.04,1); gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.drawArrays(gl.TRIANGLES,0,6);
 })(0);
 
 // =============================================
 // DETECÇÃO DE CENTRO DA TELA
 // =============================================
-let centerKey = 'ctas';
-
 function detectCenter() {
     const mid = window.innerHeight / 2;
     let best = null, bestDist = Infinity;
@@ -661,8 +810,38 @@ function detectCenter() {
     }
 
     if (best && best !== centerKey) {
+        const prevKey = centerKey;
         centerKey = best;
         triggerColor(best);
+        syncExperimentPanel(best, prevKey);
+    }
+}
+
+// =============================================
+// PAINEL AUTO-ABERTO NO PROJETO META (P4.2)
+// =============================================
+// entrando no "esse experimento aqui", abre o painel de config sozinho pra
+// pessoa ver como funciona. Saindo, só fecha se fomos nós que abrimos —
+// se já estava aberto por ação da pessoa, volta pro estado de antes (aberto).
+let panelAutoOpened = false;
+
+function syncExperimentPanel(newKey, oldKey) {
+    const panel = document.getElementById('log-monitor');
+    const btn = document.getElementById('monitor-toggle');
+    if (!panel || !btn) return;
+    const enteringExperiment = newKey === 'P4.2' && oldKey !== 'P4.2';
+    const leavingExperiment = oldKey === 'P4.2' && newKey !== 'P4.2';
+
+    if (enteringExperiment && !panel.classList.contains('visible')) {
+        panel.classList.add('visible');
+        btn.classList.add('open');
+        btn.textContent = '✕';
+        panelAutoOpened = true;
+    } else if (leavingExperiment && panelAutoOpened) {
+        panel.classList.remove('visible');
+        btn.classList.remove('open');
+        btn.textContent = '⚙';
+        panelAutoOpened = false;
     }
 }
 
@@ -739,20 +918,41 @@ function loadProjetos() {
     return fetch('projetos/projetos.json').then(r => r.json()).then(projetos => {
         projetos.forEach(p => {
             const safeId = p.id.replace('.', '_');
+            // image: string = tem capa; null = placeholder (mídia pendente);
+            // false = sem bloco de mídia mesmo (ex: projeto meta, o fundo já é a peça)
+            // image2: presente junto de image = efeito rolling-shutter entre as duas
             const hasImage = !!p.image;
-            const mediaContent = hasImage
-                ? `<img src="${p.image}" alt="${p.title}" loading="lazy">`
-                : `<div class="media-label"><div class="media-icon">▶</div></div>`;
-            const mediaClass = hasImage ? 'proj-media' : 'proj-media proj-media--placeholder';
-            const ctaHtml = (p.cta && p.cta.enabled)
-                ? `<a class="proj-cta proj-cta--${safeId}" href="${p.cta.url}">${p.cta.label}</a>`
+            const skipMedia = p.image === false;
+            let mediaHtml = '';
+            if (!skipMedia && p.image2) {
+                mediaHtml = `<div class="proj-media proj-media--rs">
+                    <img class="rs-base" src="${p.image}" alt="${p.title}" loading="lazy">
+                    <img class="rs-top" src="${p.image2}" alt="${p.title}" loading="lazy">
+                </div>`;
+            } else if (!skipMedia) {
+                const mediaContent = hasImage
+                    ? `<img src="${p.image}" alt="${p.title}" loading="lazy">`
+                    : `<div class="media-label"><div class="media-icon">▶</div></div>`;
+                const mediaClass = hasImage ? 'proj-media' : 'proj-media proj-media--placeholder';
+                mediaHtml = `<div class="${mediaClass}">${mediaContent}</div>`;
+            }
+            const ctaList = Array.isArray(p.cta) ? p.cta : (p.cta ? [p.cta] : []);
+            const ctaBtns = ctaList.filter(c => c.enabled)
+                .map(c => `<a class="proj-cta proj-cta--${safeId}" href="${c.url}" target="_blank" rel="noopener noreferrer">${c.label}</a>`)
+                .join('');
+            const ctaHtml = ctaBtns
+                ? (ctaBtns.match(/<a /g)?.length > 1 ? `<div class="proj-cta-row">${ctaBtns}</div>` : ctaBtns)
+                : '';
+            const linksHtml = (p.links && p.links.length)
+                ? `<div class="proj-links">${p.links.map(l => `<a href="${l.url}" target="_blank" rel="noopener noreferrer">${l.label}</a>`).join('')}</div>`
                 : '';
             templates.projetos[p.id] = `<div class="instancia-container"><div class="proj-card">
-                <div class="${mediaClass}">${mediaContent}</div>
+                ${mediaHtml}
                 <div class="proj-info">
                     <div class="proj-eyebrow">${p.eyebrow}</div>
                     <h3>${p.title}</h3>
-                    <p>${p.description}</p>
+                    <p class="proj-desc proj-desc--${safeId}">${p.description}</p>
+                    ${linksHtml}
                     ${ctaHtml}
                 </div>
             </div></div>`;
@@ -817,7 +1017,10 @@ function markSeen(key) {
 // todos os itens voltam a ter peso igual dentro dos grupos.
 // cycleSets: por grupo — cada grupo reseta seu ciclo independentemente.
 // Isso garante que CTAs (3 itens) nunca bloqueiem desenhos (90+ itens).
-const cycleSets = { ctas: new Set(), desenhos: new Set(), projetos: new Set() };
+// Gerado a partir das chaves de `templates`: qualquer grupo novo adicionado
+// lá (hoje ou no futuro) já nasce com a regra de não-repetição/reset.
+const cycleSets = {};
+Object.keys(templates).forEach(g => { cycleSets[g] = new Set(); });
 
 function groupOf(key) {
     if (key.startsWith('D3.')) return 'desenhos';
@@ -982,12 +1185,22 @@ function runEngine(force){
     // Antes de filtrar: reseta o ciclo de cada grupo que estiver esgotado.
     // Isso garante que grupos pequenos (ex: 3 CTAs) nunca fiquem presos
     // esperando grupos grandes (ex: 90 desenhos) terminarem.
+    let focusPoolJustCleared = false;
     Object.keys(cycleSets).forEach(g => {
         const groupItems = Object.keys(templates[g] || {});
         if (groupItems.length > 0 && groupItems.every(k => cycleSets[g].has(k))) {
             cycleSets[g].clear();
+            if (g === state.focusGroup && g !== 'ctas') focusPoolJustCleared = true;
         }
     });
+
+    // já viu tudo do grupo em foco (mais provável em projetos, que tem menos
+    // itens — desenhos tem muito mais e deve demorar bem mais pra esgotar) —
+    // sai do foco sozinho em vez de recomeçar escondido o ciclo por baixo
+    if (focusPoolJustCleared) {
+        calculateTargets('ctas');
+        return;
+    }
 
     function buildPool() {
         return allKeys.filter(k => {
@@ -1133,11 +1346,32 @@ setInterval(()=>{
     }
 },100);
 
+// commit por borda, não por nível: a checagem antiga disparava a cada
+// evento de 'scroll' enquanto a área ficasse dentro da zona de gatilho —
+// e como isso vale por vários eventos seguidos (scroll contínuo, momentum,
+// scroll anchoring do browser), um único gesto de scroll committava dezenas
+// de itens em cascata sem o usuário nunca ver a maioria deles, esgotando o
+// pool quase instantaneamente. Agora só committa na transição fora→dentro
+// da zona; precisa sair da zona de novo antes do próximo commit valer.
+let readyToCommit = true;
 window.addEventListener('scroll',()=>{
     lastActivityTime = Date.now();
     const area=document.getElementById('candidate-area');
     if(!area.children.length||state.isLocked) return;
-    if(area.getBoundingClientRect().top<window.innerHeight-150) commit();
+    const inZone = area.getBoundingClientRect().top < window.innerHeight-150;
+    if (inZone && readyToCommit) {
+        readyToCommit = false;
+        commit();
+    } else if (!inZone) {
+        readyToCommit = true;
+    }
+});
+
+// parado olhando/lendo um item (sem rolar) ainda conta como presença —
+// só scroll marcava atividade antes, então uma pausa pra apreciar um
+// desenho já bastava pra disparar o idle-reset e zerar o ciclo inteiro.
+['mousemove','keydown','touchstart','click'].forEach(evt => {
+    window.addEventListener(evt, () => { lastActivityTime = Date.now(); }, { passive: true });
 });
 
 // =============================================
@@ -1256,6 +1490,7 @@ setInterval(updateSessionProgress, 500);
         const isOpen = panel.classList.toggle('visible');
         btn.classList.toggle('open', isOpen);
         btn.textContent = isOpen ? '✕' : '⚙';
+        panelAutoOpened = false; // clique manual = escolha explícita, não reverte mais sozinho
     });
 })();
 

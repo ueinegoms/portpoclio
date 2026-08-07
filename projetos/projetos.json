@@ -13,22 +13,22 @@
     },
     {
         "id": "P4.2",
-        "eyebrow": "PROJ — 4.2",
-        "title": "projeto 2",
-        "description": "Placeholder — descreva aqui a intenção do projeto, o problema que ele resolve e as decisões que tornaram a solução possível.",
-        "image": null,
+        "eyebrow": "PROJ — 4.2 · META",
+        "title": "esse experimento aqui",
+        "description": "esse site é uma ideia de doomscrolling aplicado a portfólio, a ideia vem para explorar caminhos através de sorteios, e depois, mudança das probabilidades através de um algoritmo auto ajustável. (ainda tá por ser feito, pois esse precisa de banco de dados)",
+        "image": false,
         "cta": {
-            "enabled": false,
-            "label": "Ver projeto",
+            "enabled": true,
+            "label": "você já está no projeto",
             "url": "#"
         }
     },
     {
         "id": "P4.3",
         "eyebrow": "PROJ — 4.3",
-        "title": "projeto 3",
-        "description": "Placeholder — descreva aqui a intenção do projeto, o problema que ele resolve e as decisões que tornaram a solução possível.",
-        "image": null,
+        "title": "NFSU_3",
+        "description": "jogo rítmico, inspirado em Bomb Rush Cyberfunk e Ultrakill",
+        "image": "projetos/nfsu3.png",
         "cta": {
             "enabled": false,
             "label": "Ver projeto",
@@ -38,25 +38,32 @@
     {
         "id": "P4.4",
         "eyebrow": "PROJ — 4.4",
-        "title": "projeto 4",
-        "description": "Placeholder — descreva aqui a intenção do projeto, o problema que ele resolve e as decisões que tornaram a solução possível.",
-        "image": null,
+        "title": "Inside the mirror",
+        "description": "This is the heart of that project, a maze generator script. Which gets a 3d model and work around it measures to make a procedural maze.<br><br>*You set the model that will made the wall, and you can as well put some variations as seen in Wall 2<br><br>*It measures the model and then you define how many rows and columns it'll have in X Size and Y Size<br><br>And in the video you can see it running going through the steps as mentioned.",
+        "image": "projetos/inside the mirror.png",
+        "links": [
+            {"label": "github.com/ueinegoms/Inside-the-mirror", "url": "https://github.com/ueinegoms/Inside-the-mirror"}
+        ],
         "cta": {
-            "enabled": false,
-            "label": "Ver projeto",
-            "url": "#"
+            "enabled": true,
+            "label": "Ver vídeo",
+            "url": "https://www.youtube.com/watch?v=t7RZavjxgNw"
         }
     },
     {
         "id": "P4.5",
         "eyebrow": "PROJ — 4.5",
-        "title": "projeto 5",
-        "description": "Placeholder — descreva aqui a intenção do projeto, o problema que ele resolve e as decisões que tornaram a solução possível.",
-        "image": null,
-        "cta": {
-            "enabled": false,
-            "label": "Ver projeto",
-            "url": "#"
-        }
+        "title": "Rolling shutter effect",
+        "description": "há! eu fiz o shader famoso do tiktok antes do tiktok sequer existir! tá aí a prova e o github também",
+        "image": "projetos/rolling shutter effect1.png",
+        "image2": "projetos/rolling shutter effect2.png",
+        "links": [
+            {"label": "github.com/ueinegoms/rolling_shutter_for_video360", "url": "https://github.com/ueinegoms/rolling_shutter_for_video360"},
+            {"label": "github.com/ueinegoms/rolling_shutter_for_video360C", "url": "https://github.com/ueinegoms/rolling_shutter_for_video360C"}
+        ],
+        "cta": [
+            {"enabled": true, "label": "Ver vídeo 1", "url": "https://www.youtube.com/watch?v=M2tcIJtjySQ"},
+            {"enabled": true, "label": "Ver vídeo 2", "url": "https://www.youtube.com/watch?v=sBMviT-pOjQ"}
+        ]
     }
 ]
