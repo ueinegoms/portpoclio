@@ -65,5 +65,17 @@
             {"enabled": true, "label": "Ver vídeo 1", "url": "https://www.youtube.com/watch?v=M2tcIJtjySQ"},
             {"enabled": true, "label": "Ver vídeo 2", "url": "https://www.youtube.com/watch?v=sBMviT-pOjQ"}
         ]
+    },
+    {
+        "id": "P4.6",
+        "eyebrow": "PROJ — 4.6",
+        "title": "not meant to the radio",
+        "description": "um projeto musical experimental",
+        "image": "projetos/notmeanttotheradio.png",
+        "cta": {
+            "enabled": true,
+            "label": "ouvir músicas",
+            "url": "https://soundcloud.com/notmeanttotheradio"
+        }
     }
 ]
