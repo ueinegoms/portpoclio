@@ -33,3 +33,29 @@
 .proj-info p.proj-desc--P4_2 {
     color: #fff;
 }
+
+/* NFSU_3 ainda não tem link — wireframe do botão padrão (mesmo fundo/borda
+   azul, mesmo texto branco), só que "vazado": preenchimento transparente,
+   contorno de 1px, sem raio de borda */
+.proj-cta--P4_3 {
+    background: transparent;
+    border: 1px dashed #1C3DF7;
+    border-radius: 0;
+    cursor: default;
+    pointer-events: none;
+}
+.proj-cta-svg {
+    display: block;
+    width: 100%;
+    height: 1em;
+    overflow: visible;
+}
+.proj-cta-svg text {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 80px;
+    font-weight: 400;
+    fill: transparent;
+    stroke: #fff;
+    stroke-width: 3;
+    stroke-dasharray: 10 8;
+}

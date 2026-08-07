@@ -7,7 +7,18 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>...wayne...</title>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="projetos/projetos-buttons.css">
+    <script>
+    // fetch em vez de <link> pra esse arquivo específico: ele muda com
+    // frequência durante o desenvolvimento e um <link> estático fica preso
+    // no cache do navegador — igual já resolvemos pro projetos.json
+    fetch('projetos/projetos-buttons.css', { cache: 'no-store' })
+        .then(r => r.text())
+        .then(css => {
+            const style = document.createElement('style');
+            style.textContent = css;
+            document.head.appendChild(style);
+        });
+    </script>
     <style>
         :root {
             --text: #f0ede8;
@@ -596,6 +607,8 @@ const postFragSrc = `
     precision highp float; varying vec2 v_uv2;
     uniform sampler2D u_scene;
     uniform float u_ditherRes, u_ditherAmt, u_friedPhase;
+    uniform vec2 u_texScale; // textura do FBO só cresce (nunca realoca à toa),
+                              // então a área em uso pode ser menor que 0..1
     float rnd(vec2 s){return fract(sin(dot(s,vec2(12.9898,78.233)))*43758.5453);}
     void main() {
         vec2 uv = v_uv2;
@@ -613,7 +626,7 @@ const postFragSrc = `
             float n2 = rnd(seed2);
             uv += (vec2(n1, n2) - 0.5) * u_ditherAmt;
         }
-        gl_FragColor = texture2D(u_scene, clamp(uv, 0.0, 1.0));
+        gl_FragColor = texture2D(u_scene, clamp(uv, 0.0, 1.0) * u_texScale);
     }
 `;
 
@@ -666,6 +679,7 @@ const uScene     =gl.getUniformLocation(postProg,'u_scene');
 const uDitherRes =gl.getUniformLocation(postProg,'u_ditherRes');
 const uDitherAmt =gl.getUniformLocation(postProg,'u_ditherAmt');
 const uPostPhase =gl.getUniformLocation(postProg,'u_friedPhase');
+const uTexScale  =gl.getUniformLocation(postProg,'u_texScale');
 
 const sceneTex=gl.createTexture();
 gl.bindTexture(gl.TEXTURE_2D,sceneTex);
@@ -679,6 +693,15 @@ gl.bindFramebuffer(gl.FRAMEBUFFER,sceneFbo);
 gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,sceneTex,0);
 gl.bindFramebuffer(gl.FRAMEBUFFER,null);
 
+// a textura do FBO só cresce, nunca realoca à toa quando encolhe. No iOS a
+// barra do Safari faz a altura da viewport oscilar durante o scroll — se a
+// gente reallocasse (texImage2D) a cada oscilação, travaria a GPU/thread
+// principal bem no meio do gesto nativo. Com "só cresce", a imensa maioria
+// dessas oscilações nem chega a mexer na textura — só ajusta o viewport
+// (barato) dentro do espaço já alocado. texW/texH ficam sempre >= canvas
+// atual, e u_texScale corrige a amostragem pra usar só a fração em uso.
+let texW = 0, texH = 0;
+
 function resize(){
     const r = devicePixelRatio || 1;
     const wrap = canvas.parentElement;
@@ -687,8 +710,12 @@ function resize(){
     const overshoot = parseFloat(document.getElementById('cfg-overshoot')?.value || 1.0);
     canvas.width  = Math.round(w * r);
     canvas.height = Math.round(h * r * overshoot);
-    gl.bindTexture(gl.TEXTURE_2D,sceneTex);
-    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,canvas.width,canvas.height,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+    if (canvas.width > texW || canvas.height > texH) {
+        texW = Math.max(canvas.width, texW);
+        texH = Math.max(canvas.height, texH);
+        gl.bindTexture(gl.TEXTURE_2D,sceneTex);
+        gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,texW,texH,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+    }
     gl.viewport(0, 0, canvas.width, canvas.height);
 }
 
@@ -696,9 +723,23 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('cfg-overshoot')?.addEventListener('input', resize);
 });
 
-window.addEventListener('resize', resize);
+// no iOS Safari, a barra de endereço mostra/esconde durante o scroll e isso
+// dispara resize/visualViewport.resize várias vezes seguidas enquanto a
+// animação da barra roda. resize() realoca a textura do FBO (texImage2D),
+// uma operação pesada de GPU — chamar isso a cada mini-mudança de altura
+// trava a thread principal bem no meio do gesto de scroll nativo, fazendo
+// ele "engasgar"/andar em steps. Com debounce, o canvas só é redimensionado
+// de verdade quando a barra parar de animar (o CSS já escala visualmente
+// o canvas via width/height:100% nesse meio tempo, então não pisca nada).
+let resizeDebounceTimer = null;
+function scheduleResize() {
+    if (resizeDebounceTimer) clearTimeout(resizeDebounceTimer);
+    resizeDebounceTimer = setTimeout(resize, 120);
+}
+
+window.addEventListener('resize', scheduleResize);
 if (window.visualViewport) {
-    window.visualViewport.addEventListener('resize', resize);
+    window.visualViewport.addEventListener('resize', scheduleResize);
 }
 resize();
 
@@ -725,9 +766,19 @@ function triggerColor(key) {
     sTStart = performance.now();
 }
 
+// alt-tab / muito tempo com a aba aberta causavam dois problemas:
+// 1) o navegador pausa/atrasa requestAnimationFrame em aba em segundo
+//    plano — ao voltar, um dt gigante de uma vez só (efeito "travou/pulou").
+// 2) sTime e friedPhase cresciam pra sempre; sin()/cos() em float32 (highp
+//    no WebGL1 ainda é ~23 bits de mantissa) perdem precisão com números
+//    grandes — daí as bandas diagonais/"sincronia estranha" no dither
+//    depois de muito tempo de sessão aberta.
+const MAX_DT = 0.1;
+const TIME_WRAP = 1000;
+
 (function loop(ts){
     requestAnimationFrame(loop);
-    const dt=(ts-lastTS)/1000; lastTS=ts; sTime+=dt*0.4;
+    const dt=Math.min((ts-lastTS)/1000, MAX_DT); lastTS=ts; sTime=(sTime+dt*0.4)%TIME_WRAP;
     if(sTP<1.0){
         sTP=Math.min((ts-sTStart)/TRANS,1.0);
         if(sTP>=1.0) sSt=[...sTgt];
@@ -749,7 +800,7 @@ function triggerColor(key) {
     // reescreve a fase inteira retroativamente e causa um salto/espasmo —
     // acumulando so o incremento de cada frame, a mudança de velocidade só
     // afeta o ritmo dali pra frente.
-    friedPhase += friedSpeed * dt * 0.4;
+    friedPhase = (friedPhase + friedSpeed * dt * 0.4) % TIME_WRAP;
 
     // passe 1: mesh + cor, renderizado numa textura em vez do canvas direto
     gl.bindFramebuffer(gl.FRAMEBUFFER,sceneFbo);
@@ -782,6 +833,7 @@ function triggerColor(key) {
     gl.uniform1f(uDitherRes, ditherRes);
     gl.uniform1f(uDitherAmt, friedEnvelope * ditherAmt);
     gl.uniform1f(uPostPhase, friedPhase);
+    gl.uniform2f(uTexScale, texW > 0 ? canvas.width / texW : 1, texH > 0 ? canvas.height / texH : 1);
     gl.clearColor(0.04,0.04,0.04,1); gl.clear(gl.COLOR_BUFFER_BIT);
     gl.drawArrays(gl.TRIANGLES,0,6);
 })(0);
@@ -829,6 +881,9 @@ function syncExperimentPanel(newKey, oldKey) {
     const panel = document.getElementById('log-monitor');
     const btn = document.getElementById('monitor-toggle');
     if (!panel || !btn) return;
+    // no celular o painel (300px fixo) cobre a tela toda e trava o scroll
+    // por baixo — nem vale abrir sozinho, só atrapalha
+    if (window.innerWidth < 700) return;
     const enteringExperiment = newKey === 'P4.2' && oldKey !== 'P4.2';
     const leavingExperiment = oldKey === 'P4.2' && newKey !== 'P4.2';
 
@@ -915,7 +970,7 @@ const templates = {
 
 // projetos are loaded from projetos/projetos.json — see loadProjetos()
 function loadProjetos() {
-    return fetch('projetos/projetos.json').then(r => r.json()).then(projetos => {
+    return fetch('projetos/projetos.json', { cache: 'no-store' }).then(r => r.json()).then(projetos => {
         projetos.forEach(p => {
             const safeId = p.id.replace('.', '_');
             // image: string = tem capa; null = placeholder (mídia pendente);
@@ -936,9 +991,18 @@ function loadProjetos() {
                 const mediaClass = hasImage ? 'proj-media' : 'proj-media proj-media--placeholder';
                 mediaHtml = `<div class="${mediaClass}">${mediaContent}</div>`;
             }
+            // dashedText: true -> contorno do texto tracejado. CSS puro
+            // (-webkit-text-stroke) não tem stroke-dasharray, isso só existe
+            // em SVG — então nesse caso o label vira um <text> de SVG.
+            function ctaLabelHtml(c) {
+                if (!c.dashedText) return c.label;
+                const label = c.label.toUpperCase();
+                const vbW = label.length * 62 + 40;
+                return `<svg class="proj-cta-svg" viewBox="0 0 ${vbW} 100" preserveAspectRatio="xMidYMid meet" aria-hidden="true"><text x="50%" y="54%" text-anchor="middle" dominant-baseline="middle">${label}</text></svg>`;
+            }
             const ctaList = Array.isArray(p.cta) ? p.cta : (p.cta ? [p.cta] : []);
             const ctaBtns = ctaList.filter(c => c.enabled)
-                .map(c => `<a class="proj-cta proj-cta--${safeId}" href="${c.url}" target="_blank" rel="noopener noreferrer">${c.label}</a>`)
+                .map(c => `<a class="proj-cta proj-cta--${safeId}" href="${c.url}" target="_blank" rel="noopener noreferrer">${ctaLabelHtml(c)}</a>`)
                 .join('');
             const ctaHtml = ctaBtns
                 ? (ctaBtns.match(/<a /g)?.length > 1 ? `<div class="proj-cta-row">${ctaBtns}</div>` : ctaBtns)

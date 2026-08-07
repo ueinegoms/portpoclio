@@ -30,9 +30,10 @@
         "description": "jogo rítmico, inspirado em Bomb Rush Cyberfunk e Ultrakill",
         "image": "projetos/nfsu3.png",
         "cta": {
-            "enabled": false,
-            "label": "Ver projeto",
-            "url": "#"
+            "enabled": true,
+            "label": "Jogar",
+            "url": "#",
+            "dashedText": true
         }
     },
     {
