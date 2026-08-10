@@ -105,9 +105,31 @@
         }
         #copy-feedback.show { opacity: 1; }
 
+        /* o navegador tenta manter o conteúdo visível estável quando o DOM
+           muda acima da viewport (scroll anchoring nativo) — mas o motor
+           de sorteio muda o DOM o tempo todo (commit, poda de histórico),
+           e o navegador pode escolher qualquer elemento como âncora, não
+           só dentro de #timeline. Isso causava saltos de scroll enormes e
+           imprevisíveis, atropelando a lógica de zona/commit. Desliga
+           globalmente — quem compensa scroll agora é só o nosso próprio
+           código (ver pruneTimeline). */
+        html { overflow-anchor: none; }
+
         /* INSTÂNCIAS */
+        /* svh (small viewport height) em vez de dvh aqui de propósito: dvh
+           muda de valor toda vez que a barra do navegador mobile
+           aparece/some (acontece bastante ao inverter direção do scroll no
+           Android). Isso afeta TODOS os itens do histórico ao mesmo tempo,
+           mudando a altura do documento inteiro numa tacada só — o
+           "slingshot" ao mudar de direção. svh já assume a barra visível
+           (menor viewport possível) e não muda com a barra, então o
+           conteúdo que já compõe o scroll (e a compensação que já fazemos
+           na mão em pruneTimeline) fica estável. O fundo (#bg-canvas-wrap)
+           continua em dvh de propósito — ele é position:fixed e não afeta
+           altura de documento/scroll, só preenche visualmente o que já tá
+           na tela.  */
         .instancia-container {
-            min-height: 100dvh; display: flex; align-items: center; justify-content: center;
+            min-height: 100svh; display: flex; align-items: center; justify-content: center;
             padding: 40px; border-bottom: 1px solid var(--border);
             opacity: 0.2; transition: opacity 0.4s;
         }
@@ -469,7 +491,7 @@ window.DESENHOS_INDEX = ["13.png", "15p.png", "16.png", "166515_314350715315510_
     <div class="config-row"><span>Frequência:</span>  <input type="number" id="cfg-fried-freq" step="1" value="6"></div>
     <div class="config-row"><span>Velocidade:</span>   <input type="number" id="cfg-fried-speed" step="0.5" value="5"></div>
     <div style="font-size:9px;opacity:0.35;letter-spacing:0.1em;margin:10px 0 6px;">DITHER (post-process)</div>
-    <div class="config-row"><span>Resolução:</span>   <input type="number" id="cfg-dither-res" step="10" value="310"></div>
+    <div class="config-row"><span>Bloco (px reais):</span> <input type="number" id="cfg-dither-res" step="1" value="1"></div>
     <div class="config-row"><span>Intensidade:</span> <input type="number" id="cfg-dither-amt" step="0.01" value="0.045"></div>
     <hr style="border-color:var(--border); margin:8px 0">
     <strong>EM FOCO:</strong> <span id="current-focus">HERO</span><br>
@@ -609,12 +631,17 @@ const postFragSrc = `
     uniform float u_ditherRes, u_ditherAmt, u_friedPhase;
     uniform vec2 u_texScale; // textura do FBO só cresce (nunca realoca à toa),
                               // então a área em uso pode ser menor que 0..1
+    uniform vec2 u_canvasPx; // resolução real do canvas em pixels de dispositivo
+                              // (já com devicePixelRatio) — u_ditherRes agora é
+                              // "pixels por bloco" nessa resolução de verdade,
+                              // não uma contagem de células numa UV abstrata
     float rnd(vec2 s){return fract(sin(dot(s,vec2(12.9898,78.233)))*43758.5453);}
     void main() {
         vec2 uv = v_uv2;
         if (u_ditherAmt > 0.0001) {
-            float grid = max(u_ditherRes, 1.0);
-            vec2 cell = floor(uv * grid);
+            float blockPx = max(u_ditherRes, 1.0);
+            vec2 pixelCoord = uv * u_canvasPx;
+            vec2 cell = floor(pixelCoord / blockPx);
             float step = floor(u_friedPhase * 14.0); // degraus, não deslize
             // deslocamentos diferentes em x/y por degrau — somar o mesmo
             // valor nos dois eixos é uma translação diagonal uniforme (por
@@ -680,6 +707,7 @@ const uDitherRes =gl.getUniformLocation(postProg,'u_ditherRes');
 const uDitherAmt =gl.getUniformLocation(postProg,'u_ditherAmt');
 const uPostPhase =gl.getUniformLocation(postProg,'u_friedPhase');
 const uTexScale  =gl.getUniformLocation(postProg,'u_texScale');
+const uCanvasPx  =gl.getUniformLocation(postProg,'u_canvasPx');
 
 const sceneTex=gl.createTexture();
 gl.bindTexture(gl.TEXTURE_2D,sceneTex);
@@ -742,6 +770,11 @@ if (window.visualViewport) {
     window.visualViewport.addEventListener('resize', scheduleResize);
 }
 resize();
+// no primeiro load, unidades como 100dvh às vezes só resolvem o layout
+// de verdade depois desse resize() síncrono (a viewport ainda não tinha
+// assentado) — sem esse retoque o canvas pode ficar 0x0 e nunca corrigir
+// sozinho, já que nenhum evento de resize chega a disparar depois disso.
+setTimeout(resize, 50);
 
 let sSt = hexToRgb(DEFAULT_COLORS.ctas);
 let sTgt = hexToRgb(DEFAULT_COLORS.ctas);
@@ -834,6 +867,7 @@ const TIME_WRAP = 1000;
     gl.uniform1f(uDitherAmt, friedEnvelope * ditherAmt);
     gl.uniform1f(uPostPhase, friedPhase);
     gl.uniform2f(uTexScale, texW > 0 ? canvas.width / texW : 1, texH > 0 ? canvas.height / texH : 1);
+    gl.uniform2f(uCanvasPx, canvas.width, canvas.height);
     gl.clearColor(0.04,0.04,0.04,1); gl.clear(gl.COLOR_BUFFER_BIT);
     gl.drawArrays(gl.TRIANGLES,0,6);
 })(0);
@@ -1368,6 +1402,47 @@ function injectIntent(group){
     // SEM scrollBy — mantém posição do scroll
 }
 
+// mantém só um histórico recente no DOM — sem isso #timeline cresce pra
+// sempre conforme a sessão continua, e detectCenter() (que roda a cada
+// scroll + a cada 200ms) tem que checar a posição de CADA item já visto,
+// ficando mais lento a cada novo commit. É exatamente o que causa o
+// "stutter depois de um tempo": o custo cresce com o tamanho da sessão,
+// não com a complexidade de cada frame.
+const TIMELINE_KEEP = 20;
+// window.scrollBy dispara seu próprio evento de 'scroll', mas de forma
+// assíncrona (numa task futura, não na hora) — esse evento sintético podia
+// chegar DEPOIS que o próximo candidato já tinha sido gerado e flagrar ele
+// já "dentro da zona" antes do usuário ter chance de rolar até lá de
+// verdade, consumindo a única oportunidade de resetar o readyToCommit e
+// travando o commit pra sempre. Ignora eventos de scroll por um instante
+// logo após uma correção programática.
+let ignoreScrollUntil = 0;
+function pruneTimeline(){
+    const timeline = document.getElementById('timeline');
+    if (timeline.children.length <= TIMELINE_KEEP) return;
+    const safeAboveY = window.scrollY - window.innerHeight * 3; // só mexe no que já tá bem longe da viewport
+    // âncora que não vai ser removida — mede a posição real dela antes/depois
+    // em vez de somar uma altura calculada. Perto do fim do documento o
+    // navegador já reajusta o scroll sozinho quando o conteúdo encolhe, e
+    // somar uma compensação por cima disso duplicava o ajuste; medindo a
+    // posição de verdade a correção já sai certa não importa o que mais
+    // tenha mexido no scroll nesse meio tempo.
+    const anchor = timeline.children[TIMELINE_KEEP] || document.getElementById('candidate-area');
+    const anchorYBefore = anchor.getBoundingClientRect().top;
+    while (timeline.children.length > TIMELINE_KEEP) {
+        const first = timeline.children[0];
+        const rect = first.getBoundingClientRect();
+        const absBottom = rect.bottom + window.scrollY;
+        if (absBottom >= safeAboveY) break;
+        timeline.removeChild(first);
+    }
+    const anchorYAfter = anchor.getBoundingClientRect().top;
+    if (anchorYAfter !== anchorYBefore) {
+        window.scrollBy(0, anchorYAfter - anchorYBefore);
+        ignoreScrollUntil = Date.now() + 200;
+    }
+}
+
 function commit(){
     state.isLocked=true;
     const item=state.currentCandidate;
@@ -1392,6 +1467,7 @@ function commit(){
     });
     area.innerHTML=''; area.dataset.currentKey='';
     state.isLocked=false;
+    pruneTimeline();
     runEngine();
 }
 
@@ -1415,21 +1491,46 @@ setInterval(()=>{
 // e como isso vale por vários eventos seguidos (scroll contínuo, momentum,
 // scroll anchoring do browser), um único gesto de scroll committava dezenas
 // de itens em cascata sem o usuário nunca ver a maioria deles, esgotando o
-// pool quase instantaneamente. Agora só committa na transição fora→dentro
-// da zona; precisa sair da zona de novo antes do próximo commit valer.
+// pool quase instantaneamente.
+//
+// Rearmar dependendo de observar um evento "fora da zona" antes do próximo
+// commit parecia certo, mas quebra se o scroll pular direto de "abaixo da
+// zona" pra "bem dentro dela" num soo evento (scroll rápido, flick, ou só
+// o buffer de um candidato não ser suficiente) — sem passar por um estado
+// intermediário "fora da zona" pra rearmar, o commit trava pra sempre.
+// Em vez disso, rearma por IDENTIDADE do candidato: cada candidato novo
+// já nasce pronto pra commitar uma vez, e só fica indisponível de novo
+// quando ele muda de verdade — continua à prova de cascata (o mesmo
+// candidato nunca commita duas vezes) e agora também à prova de saltos
+// grandes de scroll.
 let readyToCommit = true;
-window.addEventListener('scroll',()=>{
-    lastActivityTime = Date.now();
+let lastArmedKey = null;
+// quando o candidato novo preenche exatamente o resto do documento (é o
+// último elemento, sem nada abaixo), o navegador simplesmente para de
+// disparar 'scroll' depois que a posição máxima é atingida — mesmo que o
+// candidato já esteja visualmente na zona de gatilho. Como esse checkCommit
+// também roda num intervalo, não fica refém só de eventos de scroll
+// acontecendo.
+function checkCommit(){
+    if (Date.now() < ignoreScrollUntil) return; // scroll sintético da poda do histórico
     const area=document.getElementById('candidate-area');
     if(!area.children.length||state.isLocked) return;
+    const currentKey = area.dataset.currentKey;
+    if (currentKey !== lastArmedKey) {
+        readyToCommit = true;
+        lastArmedKey = currentKey;
+    }
     const inZone = area.getBoundingClientRect().top < window.innerHeight-150;
     if (inZone && readyToCommit) {
         readyToCommit = false;
         commit();
-    } else if (!inZone) {
-        readyToCommit = true;
     }
+}
+window.addEventListener('scroll',()=>{
+    lastActivityTime = Date.now();
+    checkCommit();
 });
+setInterval(checkCommit, 300);
 
 // parado olhando/lendo um item (sem rolar) ainda conta como presença —
 // só scroll marcava atividade antes, então uma pausa pra apreciar um
