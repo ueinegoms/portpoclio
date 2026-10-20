@@ -263,6 +263,34 @@
         .proj-links a:hover { color: rgba(240,237,232,0.85); }
         .proj-cta-row { display: flex; gap: 10px; margin-top: 16px; }
         .proj-cta-row .proj-cta { margin-top: 0; flex: 1; }
+        /* no computador a trilha some (os botões viram filhos da fileira) e a
+           cópia que emenda o letreiro fica escondida */
+        .proj-cta-track { display: contents; }
+        .proj-cta-track [data-dup] { display: none; }
+        /* no celular dois botões não cabem lado a lado sem cortar o texto:
+           a fileira vira um letreiro infinito — cada botão do tamanho do seu
+           texto, o mesmo gap, e a cópia emenda o loop (anda metade da trilha
+           + meio gap = exatamente um conjunto). Encostou, para (pra clicar) */
+        @media (max-width: 600px) {
+            .proj-cta-row { display: block; overflow: hidden; }
+            .proj-cta-track {
+                display: flex; gap: 10px; width: max-content;
+                animation: proj-cta-marquee var(--marquee-dur, 10s) linear infinite;
+            }
+            .proj-cta-track [data-dup] { display: block; }
+            .proj-cta-row .proj-cta { flex: none; width: auto; white-space: nowrap; }
+            .proj-cta-row:hover .proj-cta-track,
+            .proj-cta-row:active .proj-cta-track { animation-play-state: paused; }
+        }
+        @keyframes proj-cta-marquee {
+            from { transform: translateX(0); }
+            to   { transform: translateX(calc(-50% - 5px)); }
+        }
+        @media (max-width: 600px) and (prefers-reduced-motion: reduce) {
+            .proj-cta-row { overflow-x: auto; }
+            .proj-cta-track { animation: none; }
+            .proj-cta-track [data-dup] { display: none; }
+        }
 
         /* rolling-shutter: duas imagens, a de cima varre em degraus (steps)
            revelando/escondendo a de baixo, num loop — "tosco" de propósito */
@@ -1038,8 +1066,16 @@ function loadProjetos() {
             const ctaBtns = ctaList.filter(c => c.enabled)
                 .map(c => `<a class="proj-cta proj-cta--${safeId}" href="${c.url}" target="_blank" rel="noopener noreferrer">${ctaLabelHtml(c)}</a>`)
                 .join('');
+            // dois ou mais: uma fileira; no celular ela roda como letreiro (ver
+            // .proj-cta-track) — a segunda cópia só emenda o loop, fora do
+            // leitor de tela e do Tab; a duração acompanha o tamanho dos textos
+            // (a mesma velocidade em todo card)
+            const ctaChars = ctaList.filter(c => c.enabled).reduce((n, c) => n + c.label.length, 0);
+            const ctaDup = ctaBtns.replace(/<a /g, '<a data-dup aria-hidden="true" tabindex="-1" ');
             const ctaHtml = ctaBtns
-                ? (ctaBtns.match(/<a /g)?.length > 1 ? `<div class="proj-cta-row">${ctaBtns}</div>` : ctaBtns)
+                ? (ctaBtns.match(/<a /g)?.length > 1
+                    ? `<div class="proj-cta-row" style="--marquee-dur:${Math.max(5, ctaChars * 0.5)}s"><div class="proj-cta-track">${ctaBtns}${ctaDup}</div></div>`
+                    : ctaBtns)
                 : '';
             const linksHtml = (p.links && p.links.length)
                 ? `<div class="proj-links">${p.links.map(l => `<a href="${l.url}" target="_blank" rel="noopener noreferrer">${l.label}</a>`).join('')}</div>`
