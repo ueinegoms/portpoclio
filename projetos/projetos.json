@@ -87,7 +87,7 @@
         "image": "projetos/noterush37.jpeg",
         "cta": [
             {"enabled": true, "label": "testar", "url": "https://ueinegoms.github.io/noterush37/"},
-            {"enabled": true, "label": "vídeo", "url": "https://youtube.com/shorts/pjCsZ0zWJfI"}
+            {"enabled": true, "label": "Ver vídeo", "url": "https://youtube.com/shorts/pjCsZ0zWJfI"}
         ]
     }
 ]
