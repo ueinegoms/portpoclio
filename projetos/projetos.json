@@ -78,5 +78,19 @@
             "label": "ouvir músicas",
             "url": "https://soundcloud.com/notmeanttotheradio"
         }
+    },
+    {
+        "id": "P4.7",
+        "eyebrow": "PROJ — 4.7 · FIRMWARE",
+        "title": "NOTE RUSH 37",
+        "description": "o note rush virou firmware: o jogo de leitura de notas rodando direto num teclado MIDI, o M-Vave SMK-37, feito em cima do Vector37 do genkigenki. lê a letra, lê a pauta ou ouve a nota e toca nas teclas; acerto faz combo com raio saindo da tela e passando pelos pads, e o placar fica no top 5 do próprio teclado. dá pra testar no navegador (o firmware de verdade, compilado pra WebAssembly) e instalar pela mesma página.",
+        "image": "projetos/noterush37.png",
+        "links": [
+            {"label": "github.com/ueinegoms/noterush37", "url": "https://github.com/ueinegoms/noterush37"}
+        ],
+        "cta": [
+            {"enabled": true, "label": "testar", "url": "https://ueinegoms.github.io/noterush37/"},
+            {"enabled": true, "label": "vídeo", "url": "https://youtube.com/shorts/pjCsZ0zWJfI"}
+        ]
     }
 ]
