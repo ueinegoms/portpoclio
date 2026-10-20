@@ -272,7 +272,10 @@
            texto, o mesmo gap, e a cópia emenda o loop (anda metade da trilha
            + meio gap = exatamente um conjunto). Encostou, para (pra clicar) */
         @media (max-width: 600px) {
-            .proj-cta-row { display: block; overflow: hidden; }
+            .proj-cta-row {                    /* de borda a borda da tela, não só o card */
+                display: block; overflow: hidden;
+                width: 100vw; margin-left: calc(50% - 50vw); margin-right: 0;
+            }
             .proj-cta-track {
                 display: flex; gap: 10px; width: max-content;
                 animation: proj-cta-marquee var(--marquee-dur, 10s) linear infinite;
